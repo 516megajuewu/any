@@ -10,6 +10,8 @@
     "postbuild": "node ./scripts/postbuild.cjs"
   },
   "dependencies": {
+    "@xterm/addon-fit": "^0.10.0",
+    "@xterm/xterm": "^5.5.0",
     "axios": "^1.7.7",
     "element-plus": "^2.8.6",
     "monaco-editor": "^0.54.0",

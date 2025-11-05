@@ -6,7 +6,9 @@
     "dev": "node index.js --dev",
     "start": "node index.js",
     "build": "node -e \"console.log('No backend build step required')\"",
-    "lint": "node -e \"console.log('Lint not configured yet')\""
+    "lint": "node -e \"console.log('Lint not configured yet')\"",
+    "qa:win": "node scripts/qa/smoke-test.js",
+    "qa:unix": "node scripts/qa/smoke-test.js"
   },
   "dependencies": {
     "chokidar": "^3.6.0",

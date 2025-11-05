@@ -12,6 +12,9 @@
         <el-menu-item index="/files">
           <span>Files</span>
         </el-menu-item>
+        <el-menu-item index="/settings">
+          <span>Settings</span>
+        </el-menu-item>
       </el-menu>
     </el-aside>
     <el-container>
@@ -35,10 +38,13 @@
 import { computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useAppStore } from '@/stores/app';
+import { useHotReload } from '@/composables/useHotReload';
 
 const router = useRouter();
 const route = useRoute();
 const appStore = useAppStore();
+
+useHotReload();
 
 const activeRoute = computed(() => route.path);
 
@@ -52,6 +58,8 @@ const pageTitle = computed(() => {
   switch (route.name) {
     case 'files':
       return 'Files';
+    case 'settings':
+      return 'Settings';
     case 'apps':
     default:
       return 'Applications';

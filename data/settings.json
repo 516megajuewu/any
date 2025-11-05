@@ -1,8 +1,12 @@
 {
-  "ui": {},
+  "ui": {
+    "theme": "dark"
+  },
   "pkgManagers": {
     "node": "npm",
     "python": "pip"
   },
-  "pipIndex": null
+  "pipIndex": null,
+  "allowRootBrowse": false,
+  "authToken": null
 }
