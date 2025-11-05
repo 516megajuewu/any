@@ -11,11 +11,13 @@ const logBus = require('./core/logBus');
 const wsHub = require('./core/wsHub');
 const fileService = require('./core/fileService');
 const packageManager = require('./core/packageManager');
+const consoleManager = require('./core/consoleManager');
 
 const appsRoutes = require('./core/routes/apps');
 const logsRoutes = require('./core/routes/logs');
 const metricsRoutes = require('./core/routes/metrics');
 const filesRoutes = require('./core/routes/files');
+const consoleRoutes = require('./core/routes/console');
 
 const isDevMode = process.argv.includes('--dev') || process.env.NODE_ENV === 'development';
 process.env.NODE_ENV = isDevMode ? 'development' : process.env.NODE_ENV || 'production';
@@ -155,6 +157,7 @@ appsRoutes(fastify);
 logsRoutes(fastify);
 metricsRoutes(fastify);
 filesRoutes(fastify);
+consoleRoutes(fastify);
 
 function snapshotApps() {
   return registry.list().map((app) => {
@@ -175,6 +178,7 @@ fastify.get('/*', (request, reply) => {
 });
 
 wsHub.init({ server: fastify.server });
+consoleManager.init();
 
 let hotReloadEmitter;
 if (isDevMode) {
@@ -221,12 +225,109 @@ metrics.events.on('metrics', (snapshot) => {
   registry.updateMetrics(snapshot.appId, snapshot);
 });
 
+processManager.events.on('stop', ({ id }) => {
+  consoleManager.destroyAllSessionsForApp(id, 'app-stopped');
+});
+
+processManager.events.on('exit', ({ id }) => {
+  consoleManager.destroyAllSessionsForApp(id, 'app-exited');
+});
+
+consoleManager.events.on('data', ({ sessionId, appId, data }) => {
+  wsHub.broadcastToChannel(`console:${sessionId}`, {
+    type: 'console:data',
+    sessionId,
+    appId,
+    data,
+    timestamp: Date.now()
+  });
+});
+
+consoleManager.events.on('terminated', ({ sessionId, appId, reason, exitCode, signal }) => {
+  wsHub.broadcastToChannel(`console:${sessionId}`, {
+    type: 'console:terminated',
+    sessionId,
+    appId,
+    reason,
+    exitCode,
+    signal,
+    timestamp: Date.now()
+  });
+});
+
+consoleManager.events.on('created', ({ sessionId, appId, shell, cols, rows, created }) => {
+  wsHub.broadcast({
+    type: 'console:created',
+    sessionId,
+    appId,
+    shell,
+    cols,
+    rows,
+    created,
+    timestamp: Date.now()
+  });
+});
+
+consoleManager.events.on('resized', ({ sessionId, appId, cols, rows }) => {
+  wsHub.broadcastToChannel(`console:${sessionId}`, {
+    type: 'console:resized',
+    sessionId,
+    appId,
+    cols,
+    rows,
+    timestamp: Date.now()
+  });
+});
+
+wsHub.events.on('message', ({ socket, message }) => {
+  const { type, sessionId, data, cols, rows } = message;
+
+  if (type === 'console:input') {
+    if (!sessionId || typeof data !== 'string') {
+      wsHub.send(socket, { type: 'error', error: 'Invalid console:input message' });
+      return;
+    }
+
+    try {
+      consoleManager.writeInput(sessionId, data);
+    } catch (error) {
+      wsHub.send(socket, {
+        type: 'error',
+        error: error.message,
+        sessionId,
+        timestamp: Date.now()
+      });
+    }
+    return;
+  }
+
+  if (type === 'console:resize') {
+    if (!sessionId || typeof cols !== 'number' || typeof rows !== 'number') {
+      wsHub.send(socket, { type: 'error', error: 'Invalid console:resize message' });
+      return;
+    }
+
+    try {
+      consoleManager.resize(sessionId, cols, rows);
+    } catch (error) {
+      wsHub.send(socket, {
+        type: 'error',
+        error: error.message,
+        sessionId,
+        timestamp: Date.now()
+      });
+    }
+    return;
+  }
+});
+
 fastify.addHook('onClose', async () => {
   if (hotReloadEmitter) {
     await closeHotReload();
   }
   await processManager.stopAll();
   metrics.clearAll();
+  consoleManager.shutdown();
   wsHub.shutdown();
 });
 
@@ -267,5 +368,6 @@ module.exports = {
   logBus,
   wsHub,
   fileService,
-  packageManager
+  packageManager,
+  consoleManager
 };
