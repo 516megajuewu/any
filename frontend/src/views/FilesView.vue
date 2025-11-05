@@ -9,15 +9,15 @@
     <div class="files-layout">
       <div class="explorer-panel">
         <FileExplorer
-          :base="base.value"
-          :path="path.value"
-          :items="items.value"
-          :loading="loading.value"
-          :selected-path="selectedPath.value"
-          :view-mode="viewMode.value"
-          :search-query="searchQuery.value"
-          :allow-root-access="allowRootBrowsing.value"
-          :allow-mutations="canMutate.value"
+          :base="base"
+          :path="path"
+          :items="items"
+          :loading="loading"
+          :selected-path="selectedPath"
+          :view-mode="viewMode"
+          :search-query="searchQuery"
+          :allow-root-access="allowRootBrowsing"
+          :allow-mutations="canMutate"
           @update:base="handleBaseUpdate"
           @update:path="handlePathUpdate"
           @update:selected-path="handleSelectionUpdate"
@@ -56,7 +56,7 @@
             <el-tag size="small" effect="plain">{{ baseLabel }}</el-tag>
             <span class="editor-path">/{{ pathDisplay }}</span>
             <el-tag
-              v-if="hasUnsavedChanges.value"
+              v-if="hasUnsavedChanges"
               type="warning"
               size="small"
               effect="plain"
@@ -64,19 +64,19 @@
               Unsaved
             </el-tag>
           </div>
-          <el-button size="small" :loading="loading.value" @click="refreshCurrentDirectory">
+          <el-button size="small" :loading="loading" @click="refreshCurrentDirectory">
             <el-icon><RefreshIcon /></el-icon>
             Refresh
           </el-button>
         </div>
 
-        <div v-if="!openFile.value" class="editor-placeholder">
+        <div v-if="!openFile" class="editor-placeholder">
           <el-empty description="Select a file to edit" image-size="150" />
         </div>
         <MonacoEditor
           v-else
           v-model="editorContent"
-          :file-path="openFile.value.path"
+          :file-path="openFile.path"
           @save="handleEditorSave"
         />
       </div>
@@ -199,7 +199,9 @@ const recentItems = computed(() => recentlyOpened.value.slice(0, 8));
 
 const folderFromFile = computed(() => {
   if (uploadFilesBuffer.value.length !== 1) return '';
-  const name = uploadFilesBuffer.value[0].name;
+  const file = uploadFilesBuffer.value[0];
+  if (!file) return '';
+  const name = file.name;
   return name.substring(0, name.lastIndexOf('.')) || name;
 });
 

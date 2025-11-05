@@ -12,6 +12,7 @@ const wsHub = require('./core/wsHub');
 const fileService = require('./core/fileService');
 const packageManager = require('./core/packageManager');
 const consoleManager = require('./core/consoleManager');
+const { serializeApps } = require('./core/appSerializer');
 
 const appsRoutes = require('./core/routes/apps');
 const logsRoutes = require('./core/routes/logs');
@@ -148,8 +149,31 @@ fastify.get('/health', async () => ({
 fastify.get('/api/settings', async () => readJsonFile('settings.json', {
   ui: {},
   pkgManagers: { node: 'npm', python: 'pip' },
-  pipIndex: null
+  pipIndex: null,
+  allowRootBrowse: false,
+  authToken: null
 }));
+
+fastify.put('/api/settings', async (request, reply) => {
+  const settingsPath = path.join(DATA_DIRECTORY, 'settings.json');
+  const currentSettings = await readJsonFile('settings.json', {
+    ui: {},
+    pkgManagers: { node: 'npm', python: 'pip' },
+    pipIndex: null,
+    allowRootBrowse: false,
+    authToken: null
+  });
+
+  const newSettings = { ...currentSettings, ...request.body };
+
+  try {
+    await fs.promises.writeFile(settingsPath, JSON.stringify(newSettings, null, 2), 'utf8');
+    return newSettings;
+  } catch (error) {
+    reply.code(500);
+    return { error: error.message };
+  }
+});
 
 fastify.get('/api/package-managers/defaults', async () => packageManager.getPackageManagerDefaults());
 

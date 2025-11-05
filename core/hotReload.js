@@ -51,6 +51,7 @@ function setupHotReload(options = {}) {
     if (reloadTimers.has(filePath)) {
       clearTimeout(reloadTimers.get(filePath));
     }
+  }
 
     const timer = setTimeout(() => {
       reloadTimers.delete(filePath);
@@ -68,7 +69,7 @@ function setupHotReload(options = {}) {
     });
   });
 
-  return emitter;
+  emitter.emit('reload', reloadEvent);
 }
 
 async function handleFileChange(eventName, filePath, watchDir, callbacks) {

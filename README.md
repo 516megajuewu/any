@@ -1,19 +1,67 @@
-# cto.new Node.js Hello World
+# Control Center - Full-Stack App Manager
 
-This repository showcases a minimal Node.js example used to validate the development workflow on cto.new.
-It demonstrates how to initialize a repository, add source code, and execute it locally using Node.js.
-Follow the steps below to run the sample application and confirm the end-to-end setup.
+A polished full-stack application for managing Node.js and Python applications with interactive consoles, file management, hot reload, and cross-platform support.
 
-## Running the example
-1. Ensure you have Node.js installed (`node --version`).
-2. Run the script with `node src/index.js`.
-3. You should see the output `Hello, cto.new!` in your terminal.
+## Features
 
-## Next steps
-Future iterations can expand this project with tests, build tooling, or additional application features.
-# Repository scaffold
+### 🚀 Interactive Console (PTY)
+- Full terminal emulation with xterm.js
+- Real-time PTY sessions via WebSocket
+- Per-app console management (up to 3 concurrent sessions)
+- Ctrl+C support, terminal resize, and auto-cleanup
+- Cross-platform shell support (PowerShell on Windows, bash/zsh on Unix)
+
+### 🔥 Core Hot Reload
+- Automatic module reloading on file changes
+- Debounced batch processing
+- Real-time notifications to frontend
+- Detailed change reports with success/failure tracking
+
+### ⚙️ Settings Panel
+- Package manager configuration (npm/yarn/pnpm, pip/poetry)
+- Custom PyPI index support
+- Theme selection (dark/light/auto)
+- File browser permissions
+- Persistent settings storage
+
+### 🎨 UI Polish
+- Consistent color palette with status indicators
+- Loading skeletons and smooth animations
+- Empty states and error handling
+- Toast notifications for user actions
+- Responsive design with Element Plus
+
+### 🧪 Cross-platform QA
+- Automated smoke test suite
+- Platform-specific process management
+- Windows and Unix compatibility verified
 
 This project boots a minimal Node.js backend together with a Vue 3 + Vite frontend.
+
+## Quick Start
+
+### Backend
+```bash
+npm install
+npm run dev   # Development mode with hot reload
+npm start     # Production mode
+npm run qa:unix  # Run smoke tests (Unix/macOS)
+npm run qa:win   # Run smoke tests (Windows)
+```
+
+### Frontend
+```bash
+cd frontend
+npm install
+npm run dev     # Start Vite dev server
+npm run build   # Build for production (outputs to ../html)
+```
+
+### Access
+- Backend API: http://localhost:3000
+- Frontend (dev): http://localhost:5173
+- WebSocket: ws://localhost:3000/ws
+- Health check: http://localhost:3000/health
 
 ## Project layout
 
@@ -280,3 +328,123 @@ If `node-pty` compilation fails, ensure build tools are installed:
 - **Ubuntu/Debian**: `sudo apt-get install build-essential python3`
 - **macOS**: `xcode-select --install`
 - **Windows**: `npm install --global windows-build-tools`
+
+## Feature Tour
+
+### Dashboard
+- View all registered applications
+- Start/stop/restart apps
+- Real-time status indicators (running/stopped/error)
+- Resource metrics (CPU/memory)
+- Middle-click app card to open interactive console
+
+### Files
+- Browse project files
+- Upload files and zip archives
+- Download files
+- View/edit files with Monaco editor
+- Syntax highlighting for common languages
+
+### Console
+- Open interactive terminal sessions for each app
+- Full ANSI color support
+- Command history and Ctrl+C
+- Terminal resize support
+- Auto-cleanup on app stop
+
+### Settings
+- Configure package managers for Node.js and Python
+- Set custom PyPI index
+- Toggle UI theme (dark/light/auto)
+- Control file browser permissions
+- All settings persist to disk
+
+### Real-time Updates
+- WebSocket-based live updates
+- Connection status indicator
+- Automatic reconnection
+- Hot reload notifications
+
+## API Documentation
+
+### Settings Endpoints
+
+#### Get Settings
+```http
+GET /api/settings
+```
+
+Response:
+```json
+{
+  "ui": { "theme": "dark" },
+  "pkgManagers": { "node": "npm", "python": "pip" },
+  "pipIndex": null,
+  "allowRootBrowse": false,
+  "authToken": null
+}
+```
+
+#### Update Settings
+```http
+PUT /api/settings
+Content-Type: application/json
+
+{
+  "ui": { "theme": "light" },
+  "pkgManagers": { "node": "pnpm", "python": "poetry" },
+  "pipIndex": "https://custom-pypi.org/simple"
+}
+```
+
+### Hot Reload Events
+
+When core modules change in development mode, the server broadcasts:
+
+```json
+{
+  "type": "core:reloaded",
+  "info": {
+    "changedFiles": [
+      { "path": "fileService.js", "event": "change" }
+    ],
+    "reloadedModules": ["fileService.js"],
+    "failedModules": [],
+    "summary": "Reloaded 1 module(s)",
+    "timestamp": 1234567890
+  },
+  "timestamp": 1234567890
+}
+```
+
+## Development
+
+### Running Tests
+```bash
+npm run qa:unix   # Unix/macOS
+npm run qa:win    # Windows
+```
+
+The smoke test suite verifies:
+- Server health and startup
+- Settings CRUD operations
+- App listing
+- Console session management
+- Package manager detection
+- Cross-platform compatibility
+
+### Hot Reload
+In development mode (`npm run dev`), the backend watches `core/**/*.js` for changes and automatically:
+1. Invalidates require cache
+2. Reloads modified modules
+3. Broadcasts reload event to frontend
+4. Shows toast notification with changed files
+
+### Adding New Routes
+1. Create route handler in `core/routes/`
+2. Import and register in `index.js`
+3. Routes are automatically available without restart in dev mode
+
+## License
+
+MIT

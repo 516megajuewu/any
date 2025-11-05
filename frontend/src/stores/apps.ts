@@ -59,6 +59,7 @@ export interface AppModel extends AppProcessStatus {
 
 export interface WebSocketClient {
   on<T = unknown>(event: 'open' | 'close' | 'error' | 'message', handler: (payload: T) => void): () => void;
+  send(message: any): void;
   close(): void;
 }
 
@@ -398,7 +399,7 @@ export const useAppsStore = defineStore('apps', {
           app.installMessage = message ?? 'Dependencies installed';
           app.lastEvent = {
             type: 'install',
-            message: app.installMessage,
+            message: app.installMessage ?? undefined,
             timestamp
           };
           break;
@@ -409,7 +410,7 @@ export const useAppsStore = defineStore('apps', {
           app.installMessage = message ?? 'Install failed';
           app.lastEvent = {
             type: 'install',
-            message: app.installMessage,
+            message: app.installMessage ?? undefined,
             timestamp
           };
           if (typeof info?.exitCode === 'number') {
@@ -533,7 +534,7 @@ export const useAppsStore = defineStore('apps', {
         app.installMessage = error?.response?.data?.error ?? error?.message ?? 'Install failed';
         app.lastEvent = {
           type: 'install',
-          message: app.installMessage,
+          message: app.installMessage ?? undefined,
           timestamp: failedAt
         };
         throw error;

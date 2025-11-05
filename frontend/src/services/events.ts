@@ -6,6 +6,7 @@ type ListenerMap = Record<EventName, Set<Listener>>;
 
 export interface EventsClient {
   on<T = unknown>(event: EventName, handler: Listener<T>): () => void;
+  send(message: any): void;
   close(): void;
   readonly status: number;
 }
@@ -96,6 +97,11 @@ export function createEventsClient(url = buildWebSocketUrl()): EventsClient {
     on(event, handler) {
       listeners[event].add(handler as Listener);
       return () => listeners[event].delete(handler as Listener);
+    },
+    send(message: any) {
+      if (socket && socket.readyState === WebSocket.OPEN) {
+        socket.send(typeof message === 'string' ? message : JSON.stringify(message));
+      }
     },
     close() {
       if (reconnectTimer) {
