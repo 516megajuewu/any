@@ -41,6 +41,49 @@ npm start     # Starts Fastify in production mode
 - Static assets are served from the `html/` directory.
 - During development, core module changes trigger a hot reload event broadcast over `/ws`.
 
+### Hot Reload
+
+When running in development mode (`npm run dev` or `NODE_ENV=development`), the backend automatically watches for changes to modules in the `core/` directory and hot-reloads them without restarting the Node process.
+
+**How it works:**
+
+1. The file watcher (chokidar) monitors all `.js` and `.json` files in `core/`
+2. When a file changes, the module cache is cleared and the module is re-imported
+3. Connected WebSocket clients receive a `core:reload` message with information about the reloaded module
+4. If a reload fails (syntax error, runtime error, etc.), the previous working version is restored and a `core:error` message is broadcast
+
+**Excluded from hot reload:**
+
+- `hotReload.js` itself (to prevent infinite loops)
+- Node modules, git files, logs, data files, and build artifacts
+- Files outside the `core/` directory
+
+**WebSocket events:**
+
+- `core:reload` - Successful module reload with file path and event details
+- `core:error` - Reload failure with error message and stack trace
+
+**Limitations:**
+
+- Route changes may require a manual server restart as Fastify routes are registered at startup
+- Running processes managed by `processManager` are not affected by reloads
+- Persistent state in modules (e.g., intervals, timers) may need manual cleanup/restart
+
+**Manual fallback:**
+
+If hot reload encounters issues or the server becomes unstable:
+
+1. Stop the server with `Ctrl+C`
+2. Clear the Node module cache: `rm -rf node_modules/.cache` (if applicable)
+3. Restart the server with `npm run dev`
+
+**Safeguards:**
+
+- Reload loop detection prevents rapid successive reloads of the same module
+- Failed reloads automatically restore the previous working module
+- All errors are logged and broadcast to connected clients
+- Debouncing prevents excessive reload attempts during rapid file changes
+
 ## Frontend
 
 The frontend is a Vue 3 + TypeScript application that uses Vite, Element Plus, Pinia, and Vue Router.
