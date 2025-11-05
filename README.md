@@ -18,23 +18,29 @@ A polished full-stack application for managing Node.js and Python applications w
 - Detailed change reports with success/failure tracking
 
 ### ⚙️ Settings Panel
-- Package manager configuration (npm/yarn/pnpm, pip/poetry)
-- Custom PyPI index support
-- Theme selection (dark/light/auto)
-- File browser permissions
-- Persistent settings storage
+- **Package Manager Configuration**: Select npm/yarn/pnpm for Node.js, pip/poetry for Python
+- **Custom PyPI Index**: Configure alternative Python package indexes
+- **Theme Selection**: Dark, light, or auto theme with smooth transitions
+- **File Browser Security**: Toggle root directory browsing access
+- **Persistent Storage**: All settings saved to `./data/settings.json`
+- **Live Application**: Settings immediately affect install behavior, theme, and file access
 
 ### 🎨 UI Polish
-- Consistent color palette with status indicators
-- Loading skeletons and smooth animations
-- Empty states and error handling
-- Toast notifications for user actions
-- Responsive design with Element Plus
+- **Modern Theme System**: Comprehensive CSS variables with dark/light support
+- **Status Indicators**: Animated connection status with visual feedback
+- **Loading Skeletons**: Smooth loading animations for better UX
+- **Empty States**: Helpful illustrations and action prompts
+- **Toast Notifications**: Success/error messages with retry options
+- **Micro-interactions**: Hover states, focus indicators, and smooth transitions
+- **Responsive Design**: Mobile-friendly layout with Element Plus components
 
 ### 🧪 Cross-platform QA
-- Automated smoke test suite
-- Platform-specific process management
-- Windows and Unix compatibility verified
+- **Comprehensive Test Suite**: Smoke, file system, and console tests
+- **Platform Detection**: Automatic Windows/Unix behavior adaptation
+- **Process Management**: Robust start/stop/restart with tree-kill fallbacks
+- **File Operations**: Upload, download, zip extraction, and path handling
+- **Console Testing**: WebSocket PTY sessions with resize and input testing
+- **Automated Reporting**: Detailed test results with error diagnostics
 
 This project boots a minimal Node.js backend together with a Vue 3 + Vite frontend.
 
@@ -45,8 +51,14 @@ This project boots a minimal Node.js backend together with a Vue 3 + Vite fronte
 npm install
 npm run dev   # Development mode with hot reload
 npm start     # Production mode
-npm run qa:unix  # Run smoke tests (Unix/macOS)
-npm run qa:win   # Run smoke tests (Windows)
+
+# Quality Assurance
+npm run qa          # Run all QA tests (recommended)
+npm run qa:smoke    # Run basic smoke tests
+npm run qa:files    # Run file system tests
+npm run qa:console  # Run console/PTY tests
+npm run qa:unix     # Run all tests (Unix/macOS)
+npm run qa:win      # Run all tests (Windows)
 ```
 
 ### Frontend
@@ -155,6 +167,35 @@ Two JSON files are included for initial configuration:
 
 - `data/apps.json` – list of managed applications (empty array by default)
 - `data/settings.json` – UI and package manager defaults
+
+## Settings Configuration
+
+The settings panel provides comprehensive configuration options that are immediately applied:
+
+### Package Managers
+- **Node.js**: Choose between `npm`, `yarn`, or `pnpm`
+- **Python**: Choose between `pip`, `pip3`, or `poetry`
+- **Custom PyPI Index**: Optional alternative package index URL
+
+### UI Preferences
+- **Theme**: `dark`, `light`, or `auto` (follows system preference)
+- Theme changes are applied immediately with smooth transitions
+
+### Security & Access
+- **Root Browsing**: Allow/disallow file browser access outside project directory
+- When disabled, attempts to access `base=root` return 403 Forbidden
+- **Authentication Token**: Reserved for future API access control
+
+### Settings Storage
+- Settings are persisted to `./data/settings.json`
+- Default settings are automatically created if file doesn't exist
+- All settings changes are validated before saving
+
+### Live Application
+Settings affect the following features in real-time:
+- **Package Installation**: Uses selected managers and PyPI index
+- **File Browser**: Respects root browsing restrictions
+- **UI Theme**: Toggles between dark/light themes immediately
 
 ## Frontend deployment
 
@@ -444,6 +485,66 @@ In development mode (`npm run dev`), the backend watches `core/**/*.js` for chan
 1. Create route handler in `core/routes/`
 2. Import and register in `index.js`
 3. Routes are automatically available without restart in dev mode
+
+## Quality Assurance (QA)
+
+The project includes comprehensive QA scripts to verify functionality across platforms:
+
+### Running QA Tests
+
+```bash
+# Run all tests (recommended)
+npm run qa
+
+# Run specific test suites
+npm run qa:smoke     # Basic API and functionality tests
+npm run qa:files     # File system operations
+npm run qa:console   # Console/PTY sessions
+
+# Platform-specific commands
+npm run qa:unix      # Unix/macOS
+npm run qa:win       # Windows
+```
+
+### Test Coverage
+
+#### Smoke Tests (`qa:smoke`)
+- Server health check
+- Settings API (GET/PUT)
+- App lifecycle (create, start, stop, delete)
+- Package manager defaults
+- Cross-platform process handling
+- WebSocket connectivity
+
+#### File System Tests (`qa:files`)
+- Directory listing
+- File creation, reading, writing
+- Directory creation and deletion
+- File upload and ZIP extraction
+- Path normalization across platforms
+- Root browsing security
+
+#### Console Tests (`qa:console`)
+- WebSocket connection establishment
+- PTY session creation
+- Console input/output handling
+- Terminal resize functionality
+- Cross-platform shell support
+
+### Platform Compatibility
+
+The QA scripts verify:
+- **Windows**: PowerShell support, path handling, process management
+- **macOS**: bash/zsh support, Unix-style paths
+- **Linux**: bash support, standard Unix behavior
+
+### Error Handling
+
+All QA scripts include:
+- Graceful error reporting
+- Cleanup of test resources
+- Platform-specific fallbacks
+- Detailed diagnostic output
 
 ## License
 

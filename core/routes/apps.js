@@ -5,6 +5,25 @@ const packageManager = require('../packageManager');
 const wsHub = require('../wsHub');
 const { serializeApp, serializeApps } = require('../appSerializer');
 
+async function readSettings() {
+  const fs = require('fs');
+  const path = require('path');
+  const dataPath = path.join(process.cwd(), 'data');
+  
+  try {
+    const raw = await fs.promises.readFile(path.join(dataPath, 'settings.json'), 'utf8');
+    return JSON.parse(raw || 'null');
+  } catch (error) {
+    return {
+      ui: {},
+      pkgManagers: { node: 'npm', python: 'pip' },
+      pipIndex: null,
+      allowRootBrowse: false,
+      authToken: null
+    };
+  }
+}
+
 async function appsRoutes(fastify) {
   const broadcastAppList = async () => {
     const apps = await serializeApps(registry.list());
@@ -226,13 +245,25 @@ async function appsRoutes(fastify) {
       return { error: 'Package install not supported for CLI apps' };
     }
 
+    const settings = await readSettings();
     const { manager, args = [], indexUrl } = request.body || {};
-    const normalizedManager = manager || (app.type === 'python' ? 'pip' : 'npm');
+    
+    let normalizedManager;
+    if (manager) {
+      normalizedManager = manager;
+    } else {
+      normalizedManager = app.type === 'python' 
+        ? settings.pkgManagers?.python || 'pip'
+        : settings.pkgManagers?.node || 'npm';
+    }
+
+    const effectiveIndexUrl = indexUrl || settings.pipIndex;
 
     wsHub.publish('app.install', {
       status: 'started',
       manager: normalizedManager,
       args,
+      indexUrl: effectiveIndexUrl,
       timestamp: Date.now()
     }, { appId: id });
 
@@ -241,7 +272,7 @@ async function appsRoutes(fastify) {
         await packageManager.installPython(id, normalizedManager, args, {
           cwd: app.cwd,
           env: app.env,
-          indexUrl
+          indexUrl: effectiveIndexUrl
         });
       } else {
         await packageManager.installNode(id, normalizedManager, args, {

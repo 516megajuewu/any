@@ -24,7 +24,16 @@
         </div>
         <div class="header-status" :class="statusClass">
           <span class="status-indicator" :class="statusIndicatorClass" />
-          <span class="status-label">{{ statusLabel }}</span>
+          <span class="status-label">{{ statusText }}</span>
+          <el-button 
+            v-if="shouldShowReconnectButton"
+            type="text" 
+            size="small"
+            @click="manualReconnect"
+            class="reconnect-btn"
+          >
+            Reconnect
+          </el-button>
         </div>
       </el-header>
       <el-main class="app-main">
@@ -39,12 +48,19 @@ import { computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useAppStore } from '@/stores/app';
 import { useHotReload } from '@/composables/useHotReload';
+import { useWebSocketStatus } from '@/composables/useWebSocketStatus';
 
 const router = useRouter();
 const route = useRoute();
 const appStore = useAppStore();
 
 useHotReload();
+const { 
+  connectionStatus, 
+  statusText, 
+  shouldShowReconnectButton,
+  manualReconnect 
+} = useWebSocketStatus();
 
 const activeRoute = computed(() => route.path);
 
@@ -66,42 +82,28 @@ const pageTitle = computed(() => {
   }
 });
 
-const statusLabel = computed(() => {
-  const connected = appStore.isEventStreamConnected;
-  const healthy = appStore.isBackendHealthy;
-
-  if (connected && healthy) {
-    return 'Online';
-  }
-
-  if (healthy) {
-    return 'Degraded';
-  }
-
-  return 'Offline';
-});
-
 const statusClass = computed(() => ({
-  'is-online': appStore.isBackendHealthy,
-  'is-offline': !appStore.isBackendHealthy
+  'is-online': connectionStatus.value === 'online',
+  'is-offline': connectionStatus.value === 'offline',
+  'is-degraded': connectionStatus.value === 'degraded'
 }));
 
 const statusIndicatorClass = computed(() => ({
-  'status-indicator--online': appStore.isEventStreamConnected && appStore.isBackendHealthy,
-  'status-indicator--degraded': appStore.isBackendHealthy && !appStore.isEventStreamConnected,
-  'status-indicator--offline': !appStore.isBackendHealthy
+  'status-indicator--online': connectionStatus.value === 'online',
+  'status-indicator--degraded': connectionStatus.value === 'degraded',
+  'status-indicator--offline': connectionStatus.value === 'offline'
 }));
 </script>
 
 <style scoped>
 .app-layout {
   min-height: 100vh;
-  background: var(--surface-subtle);
+  background: var(--bg-primary);
 }
 
 .app-aside {
-  background: var(--surface-stronger);
-  border-right: 1px solid var(--border-subtle);
+  background: var(--bg-secondary);
+  border-right: 1px solid var(--border-default);
   display: flex;
   flex-direction: column;
   padding: 1.5rem 1rem;
@@ -141,11 +143,21 @@ const statusIndicatorClass = computed(() => ({
   margin-bottom: 0.5rem;
   color: var(--text-muted);
   font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.app-menu :deep(.el-menu-item:hover) {
+  background: var(--bg-hover);
+  color: var(--text-secondary);
 }
 
 .app-menu :deep(.el-menu-item.is-active) {
   color: var(--text-emphasis);
-  background: rgba(59, 130, 246, 0.15);
+  background: var(--accent-primary);
+}
+
+.app-menu :deep(.el-menu-item.is-active:hover) {
+  background: var(--accent-hover);
 }
 
 .app-header {
@@ -153,8 +165,8 @@ const statusIndicatorClass = computed(() => ({
   align-items: center;
   justify-content: space-between;
   padding: 1.25rem 2rem;
-  background: var(--surface); 
-  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-secondary); 
+  border-bottom: 1px solid var(--border-default);
 }
 
 .header-title {
@@ -169,22 +181,29 @@ const statusIndicatorClass = computed(() => ({
   gap: 0.5rem;
   padding: 0.4rem 0.85rem;
   border-radius: 999px;
-  background: var(--surface-stronger);
+  background: var(--bg-tertiary);
   color: var(--text-muted);
   font-size: 0.85rem;
   border: 1px solid var(--border-subtle);
+  transition: all 0.2s ease;
 }
 
 .header-status.is-online {
-  color: var(--success-strong);
-  border-color: rgba(34, 197, 94, 0.35);
-  background: rgba(34, 197, 94, 0.08);
+  color: var(--success);
+  border-color: var(--success);
+  background: var(--success-light);
 }
 
 .header-status.is-offline {
-  color: var(--danger-strong);
-  border-color: rgba(248, 113, 113, 0.35);
-  background: rgba(248, 113, 113, 0.08);
+  color: var(--danger);
+  border-color: var(--danger);
+  background: var(--danger-light);
+}
+
+.header-status.is-degraded {
+  color: var(--warning);
+  border-color: var(--warning);
+  background: var(--warning-light);
 }
 
 .status-indicator {
@@ -196,22 +215,55 @@ const statusIndicatorClass = computed(() => ({
 
 .status-indicator--online {
   background: var(--success);
-  box-shadow: 0 0 10px rgba(34, 197, 94, 0.6);
+  box-shadow: 0 0 10px var(--success);
+  animation: pulse-green 2s infinite;
 }
 
 .status-indicator--degraded {
   background: var(--warning);
-  box-shadow: 0 0 10px rgba(250, 204, 21, 0.45);
+  box-shadow: 0 0 10px var(--warning);
+  animation: pulse-yellow 2s infinite;
 }
 
 .status-indicator--offline {
   background: var(--danger);
-  box-shadow: 0 0 10px rgba(248, 113, 113, 0.45);
+  box-shadow: 0 0 10px var(--danger);
+  animation: pulse-red 2s infinite;
+}
+
+@keyframes pulse-green {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+@keyframes pulse-yellow {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+@keyframes pulse-red {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
 }
 
 .app-main {
   padding: 2rem;
-  background: linear-gradient(155deg, rgba(30, 41, 59, 0.9), rgba(15, 23, 42, 0.95));
+  background: var(--bg-primary);
+  min-height: calc(100vh - 80px);
+}
+
+.reconnect-btn {
+  margin-left: 0.5rem;
+  color: var(--accent-primary);
+  font-size: 0.75rem;
+  padding: 0.2rem 0.5rem;
+  border-radius: 0.25rem;
+  transition: all 0.2s ease;
+}
+
+.reconnect-btn:hover {
+  background: var(--accent-light);
+  color: var(--accent-hover);
 }
 @media (max-width: 960px) {
   .app-layout {
@@ -225,7 +277,7 @@ const statusIndicatorClass = computed(() => ({
     justify-content: space-between;
     padding: 1rem 1.5rem;
     border-right: none;
-    border-bottom: 1px solid var(--border-subtle);
+    border-bottom: 1px solid var(--border-default);
   }
 
   .app-menu {

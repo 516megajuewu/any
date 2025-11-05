@@ -51,7 +51,6 @@ function setupHotReload(options = {}) {
     if (reloadTimers.has(filePath)) {
       clearTimeout(reloadTimers.get(filePath));
     }
-  }
 
     const timer = setTimeout(() => {
       reloadTimers.delete(filePath);
