@@ -5,10 +5,29 @@
         <div class="base-selector">
           <el-select v-model="localBase" size="small" @change="handleBaseChange">
             <el-option label="Apps Directory" value="apps" />
-            <el-option label="Project Root" value="root">
+            <el-option
+              label="Project Root"
+              value="root"
+              :disabled="!props.allowRootAccess"
+            >
               <div class="root-option">
                 <span>Project Root</span>
-                <el-tag type="warning" size="small" effect="plain">⚠ Careful</el-tag>
+                <el-tag
+                  v-if="props.allowRootAccess"
+                  type="warning"
+                  size="small"
+                  effect="plain"
+                >
+                  ⚠ Careful
+                </el-tag>
+                <el-tag
+                  v-else
+                  type="info"
+                  size="small"
+                  effect="plain"
+                >
+                  Disabled
+                </el-tag>
               </div>
             </el-option>
           </el-select>
@@ -34,22 +53,49 @@
           </el-button-group>
         </div>
       </div>
-
-      <div class="toolbar">
-        <el-button-group>
-          <el-tooltip content="New File">
-            <el-button size="small" :icon="DocumentIcon" @click="handleNewFile" />
-          </el-tooltip>
-          <el-tooltip content="New Folder">
-            <el-button size="small" :icon="FolderAddIcon" @click="handleNewFolder" />
-          </el-tooltip>
-          <el-tooltip content="Upload">
-            <el-button size="small" :icon="UploadIcon" @click="triggerFileUpload" />
-          </el-tooltip>
-          <el-tooltip content="Refresh">
-            <el-button size="small" :icon="RefreshIcon" @click="emit('refresh')" />
-          </el-tooltip>
-        </el-button-group>
+      <div class="header-right">
+        <el-input
+          v-model="localSearch"
+          size="small"
+          placeholder="Search files"
+          clearable
+          class="search-input"
+        >
+          <template #prefix>
+            <el-icon><SearchIcon /></el-icon>
+          </template>
+        </el-input>
+        <div class="toolbar">
+          <el-button-group>
+            <el-tooltip content="New File">
+              <el-button
+                size="small"
+                :icon="DocumentIcon"
+                :disabled="!canMutate"
+                @click="handleNewFile"
+              />
+            </el-tooltip>
+            <el-tooltip content="New Folder">
+              <el-button
+                size="small"
+                :icon="FolderAddIcon"
+                :disabled="!canMutate"
+                @click="handleNewFolder"
+              />
+            </el-tooltip>
+            <el-tooltip content="Upload">
+              <el-button
+                size="small"
+                :icon="UploadIcon"
+                :disabled="!canMutate"
+                @click="triggerFileUpload"
+              />
+            </el-tooltip>
+            <el-tooltip content="Refresh">
+              <el-button size="small" :icon="RefreshIcon" @click="emit('refresh')" />
+            </el-tooltip>
+          </el-button-group>
+        </div>
       </div>
     </div>
 
@@ -68,40 +114,65 @@
       </el-breadcrumb>
     </div>
 
-    <div v-if="localViewMode === 'list'" class="list-container" v-loading="props.loading">
-      <div
-        v-for="item in orderedItems"
-        :key="item.path"
-        class="file-item"
-        :class="{ selected: currentSelection === item.path, directory: item.type === 'directory' }"
-        @click="handleItemClick(item)"
-        @dblclick="handleItemDoubleClick(item)"
-        @contextmenu.prevent="currentSelection = item.path; emit('update:selectedPath', item.path)"
+    <div v-if="localViewMode === 'list'" class="list-wrapper" v-loading="props.loading">
+      <el-table
+        :data="displayedItems"
+        row-key="path"
+        class="file-table"
+        :border="false"
+        size="small"
+        height="100%"
+        highlight-current-row
+        :row-class-name="rowClassName"
+        @row-click="handleRowClick"
+        @row-dblclick="handleRowDoubleClick"
+        @row-contextmenu.prevent="handleRowContextMenu"
       >
-        <div class="file-icon">
-          <el-icon v-if="item.type === 'directory'">
-            <FolderIcon />
-          </el-icon>
-          <el-icon v-else>
-            <DocumentIcon />
-          </el-icon>
-        </div>
-        <div class="file-info">
-          <div class="file-name">{{ item.name }}</div>
-          <div v-if="item.type === 'file'" class="file-meta">{{ formatSize(item.size) }}</div>
-        </div>
-        <div class="file-actions">
-          <el-button-group size="small">
-            <el-button :icon="EditIcon" size="small" @click.stop="handleRename(item)" />
-            <el-button :icon="DeleteIcon" size="small" @click.stop="handleDelete(item)" />
-          </el-button-group>
-        </div>
-      </div>
-
-      <el-empty
-        v-if="!props.loading && orderedItems.length === 0"
-        description="No files in this directory"
-      />
+        <el-table-column prop="name" label="Name" min-width="220">
+          <template #default="{ row }">
+            <div class="cell-name">
+              <el-icon class="cell-icon">
+                <FolderIcon v-if="row.type === 'directory'" />
+                <DocumentIcon v-else />
+              </el-icon>
+              <span class="cell-text">{{ row.name }}</span>
+            </div>
+          </template>
+        </el-table-column>
+        <el-table-column label="Size" width="120" align="right">
+          <template #default="{ row }">
+            <span>{{ row.type === 'file' ? formatSize(row.size) : 'Folder' }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="Modified" width="200">
+          <template #default="{ row }">
+            <span>{{ formatDate(row.mtime) }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column width="120" align="right">
+          <template #default="{ row }">
+            <el-button-group size="small">
+              <el-button
+                :icon="EditIcon"
+                size="small"
+                :disabled="!canMutate"
+                @click.stop="handleRename(row)"
+              />
+              <el-button
+                :icon="DeleteIcon"
+                size="small"
+                type="danger"
+                plain
+                :disabled="!canMutate"
+                @click.stop="handleDelete(row)"
+              />
+            </el-button-group>
+          </template>
+        </el-table-column>
+        <template #empty>
+          <el-empty description="No files in this directory" />
+        </template>
+      </el-table>
     </div>
 
     <div v-else class="tree-container" v-loading="props.loading">
@@ -137,7 +208,7 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
-import { ElMessageBox } from 'element-plus';
+import { ElMessage, ElMessageBox } from 'element-plus';
 import {
   Document as DocumentIcon,
   Folder as FolderIcon,
@@ -147,7 +218,8 @@ import {
   Edit as EditIcon,
   Delete as DeleteIcon,
   List as ListIcon,
-  Collection as CollectionIcon
+  Collection as CollectionIcon,
+  Search as SearchIcon
 } from '@element-plus/icons-vue';
 import type { FileBase, FileEntry } from '@/services/files';
 import * as filesService from '@/services/files';
@@ -159,6 +231,9 @@ interface Props {
   loading: boolean;
   selectedPath: string | null;
   viewMode?: 'list' | 'tree';
+  searchQuery?: string;
+  allowRootAccess?: boolean;
+  allowMutations?: boolean;
 }
 
 interface Emits {
@@ -166,6 +241,7 @@ interface Emits {
   (e: 'update:path', value: string): void;
   (e: 'update:selectedPath', value: string | null): void;
   (e: 'update:viewMode', value: 'list' | 'tree'): void;
+  (e: 'update:searchQuery', value: string): void;
   (e: 'refresh'): void;
   (e: 'create-file', payload: { name: string; path: string }): void;
   (e: 'create-folder', payload: { name: string; path: string }): void;
@@ -177,16 +253,22 @@ interface Emits {
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  viewMode: 'list'
+  viewMode: 'list',
+  searchQuery: '',
+  allowRootAccess: false,
+  allowMutations: true
 });
 
 const emit = defineEmits<Emits>();
 
 const localBase = ref<FileBase>(props.base);
 const localViewMode = ref<'list' | 'tree'>(props.viewMode ?? 'list');
+const localSearch = ref(props.searchQuery ?? '');
 const currentSelection = ref<string | null>(props.selectedPath ?? null);
 const treeRenderKey = ref(0);
 const fileInput = ref<HTMLInputElement | null>(null);
+
+const canMutate = computed(() => props.allowMutations !== false);
 
 const pathSegments = computed(() => {
   if (!props.path || props.path === '.') return [];
@@ -200,6 +282,14 @@ const orderedItems = computed(() => {
     }
     return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
   });
+});
+
+const displayedItems = computed(() => {
+  const query = localSearch.value.trim().toLowerCase();
+  if (!query) {
+    return orderedItems.value;
+  }
+  return orderedItems.value.filter((item) => item.name.toLowerCase().includes(query));
 });
 
 const treeProps = {
@@ -225,6 +315,19 @@ watch(() => props.selectedPath, (value) => {
   currentSelection.value = value;
 });
 
+watch(() => props.searchQuery, (value) => {
+  const normalized = value ?? '';
+  if (normalized !== localSearch.value) {
+    localSearch.value = normalized;
+  }
+});
+
+watch(localSearch, (value) => {
+  if (value !== props.searchQuery) {
+    emit('update:searchQuery', value);
+  }
+});
+
 function setViewMode(mode: 'list' | 'tree') {
   if (localViewMode.value === mode) return;
   localViewMode.value = mode;
@@ -241,19 +344,25 @@ function navigateToSegment(index: number) {
   navigateTo(path);
 }
 
-function handleItemClick(item: FileEntry) {
-  currentSelection.value = item.path;
-  emit('update:selectedPath', item.path);
-  emit('select', item);
+function handleRowClick(row: FileEntry) {
+  currentSelection.value = row.path;
+  emit('update:selectedPath', row.path);
+  emit('select', row);
 }
 
-function handleItemDoubleClick(item: FileEntry) {
-  if (item.type === 'directory') {
-    navigateTo(item.path);
+function handleRowDoubleClick(row: FileEntry) {
+  if (row.type === 'directory') {
+    navigateTo(row.path);
   } else {
-    emit('open', item);
+    emit('open', row);
   }
 }
+
+function handleRowContextMenu(row: FileEntry) {
+  currentSelection.value = row.path;
+  emit('update:selectedPath', row.path);
+}
+
 
 async function handleBaseChange(value: FileBase) {
   if (value === props.base) {
@@ -263,6 +372,12 @@ async function handleBaseChange(value: FileBase) {
   const previous = localBase.value;
 
   if (value === 'root') {
+    if (!props.allowRootAccess) {
+      ElMessage.warning('Project root access is disabled.');
+      localBase.value = previous;
+      return;
+    }
+
     try {
       await ElMessageBox.confirm(
         'You are about to browse the project root directory. Be careful not to modify critical files.',
@@ -302,6 +417,7 @@ async function promptForName(title: string, defaultValue = ''): Promise<string |
 }
 
 async function handleNewFile() {
+  if (!canMutate.value) return;
   const name = await promptForName('New File');
   if (!name) return;
   const targetPath = props.path === '.' ? name : `${props.path}/${name}`;
@@ -309,6 +425,7 @@ async function handleNewFile() {
 }
 
 async function handleNewFolder() {
+  if (!canMutate.value) return;
   const name = await promptForName('New Folder');
   if (!name) return;
   const targetPath = props.path === '.' ? name : `${props.path}/${name}`;
@@ -316,6 +433,7 @@ async function handleNewFolder() {
 }
 
 async function handleRename(entry: FileEntry) {
+  if (!canMutate.value) return;
   const newName = await promptForName('Rename', entry.name);
   if (!newName || newName === entry.name) return;
   const parent = entry.path.includes('/') ? entry.path.slice(0, entry.path.lastIndexOf('/')) : '.';
@@ -324,6 +442,7 @@ async function handleRename(entry: FileEntry) {
 }
 
 async function handleDelete(entry: FileEntry) {
+  if (!canMutate.value) return;
   try {
     await ElMessageBox.confirm(
       `Delete "${entry.name}"? This action cannot be undone.`,
@@ -341,6 +460,7 @@ async function handleDelete(entry: FileEntry) {
 }
 
 function triggerFileUpload() {
+  if (!canMutate.value) return;
   fileInput.value?.click();
 }
 
@@ -375,6 +495,21 @@ function formatSize(bytes: number): string {
   const value = bytes / Math.pow(k, i);
   return `${value % 1 === 0 ? value : value.toFixed(1)} ${sizes[i]}`;
 }
+
+function formatDate(value: string | Date | number | undefined): string {
+  if (!value) {
+    return '—';
+  }
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return '—';
+  }
+  return date.toLocaleString();
+}
+
+function rowClassName({ row }: { row: FileEntry }) {
+  return row.path === currentSelection.value ? 'is-selected-row' : '';
+}
 </script>
 
 <style scoped>
@@ -396,20 +531,26 @@ function formatSize(bytes: number): string {
   background: var(--surface-strong);
   border-bottom: 1px solid var(--border-subtle);
   gap: 1rem;
+  flex-wrap: wrap;
 }
 
-.header-left {
+.header-left,
+.header-right {
   display: flex;
   align-items: center;
   gap: 0.75rem;
-  flex: 1;
+  flex-wrap: wrap;
 }
 
 .base-selector {
   min-width: 180px;
 }
 
-.view-toggle {
+.search-input {
+  width: 220px;
+}
+
+.toolbar {
   display: flex;
   align-items: center;
 }
@@ -419,11 +560,7 @@ function formatSize(bytes: number): string {
   align-items: center;
   justify-content: space-between;
   width: 100%;
-}
-
-.toolbar {
-  display: flex;
-  align-items: center;
+  gap: 0.5rem;
 }
 
 .breadcrumb-container {
@@ -436,66 +573,62 @@ function formatSize(bytes: number): string {
   cursor: pointer;
 }
 
-.list-container {
+.list-wrapper {
   flex: 1;
-  overflow-y: auto;
-  padding: 0.5rem;
+  min-height: 0;
+  padding: 0.25rem 0.75rem 0.75rem;
 }
 
-.file-item {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  padding: 0.75rem;
+.file-table {
+  width: 100%;
+  height: 100%;
+  background: transparent;
+}
+
+.file-table :deep(.el-table__inner-wrapper) {
   border-radius: 0.5rem;
-  cursor: pointer;
-  transition: background 0.15s;
+  overflow: hidden;
+  border: 1px solid var(--border-subtle);
+  background: var(--surface);
 }
 
-.file-item:hover {
-  background: var(--surface-subtle);
+.file-table :deep(.el-table__header th) {
+  background: var(--surface-strong);
+  color: var(--text-muted);
+  border-color: var(--border-subtle);
 }
 
-.file-item.selected {
-  background: rgba(59, 130, 246, 0.15);
+.file-table :deep(.el-table__body td) {
+  border-color: var(--border-subtle);
+  background: transparent;
+  color: var(--text-emphasis);
 }
 
-.file-item.directory .file-name {
-  font-weight: 500;
+.file-table :deep(.el-table__body tr:hover > td) {
+  background: rgba(59, 130, 246, 0.08);
 }
 
-.file-icon {
+.file-table :deep(.is-selected-row > td) {
+  background: rgba(59, 130, 246, 0.15) !important;
+}
+
+.cell-name {
   display: flex;
   align-items: center;
-  font-size: 1.25rem;
+  gap: 0.5rem;
+}
+
+.cell-icon {
+  font-size: 1.1rem;
   color: var(--primary);
 }
 
-.file-info {
-  flex: 1;
-  min-width: 0;
-}
-
-.file-name {
+.cell-text {
   font-size: 0.9rem;
   color: var(--text-emphasis);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-.file-meta {
-  font-size: 0.75rem;
-  color: var(--text-muted);
-}
-
-.file-actions {
-  opacity: 0;
-  transition: opacity 0.15s;
-}
-
-.file-item:hover .file-actions {
-  opacity: 1;
 }
 
 .tree-container {
@@ -508,5 +641,16 @@ function formatSize(bytes: number): string {
   display: flex;
   align-items: center;
   gap: 0.5rem;
+}
+
+@media (max-width: 720px) {
+  .explorer-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .search-input {
+    width: 100%;
+  }
 }
 </style>
