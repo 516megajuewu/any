@@ -11,6 +11,7 @@ const logBus = require('./core/logBus');
 const wsHub = require('./core/wsHub');
 const fileService = require('./core/fileService');
 const packageManager = require('./core/packageManager');
+const { serializeApps } = require('./core/appSerializer');
 
 const appsRoutes = require('./core/routes/apps');
 const logsRoutes = require('./core/routes/logs');
@@ -156,16 +157,8 @@ logsRoutes(fastify);
 metricsRoutes(fastify);
 filesRoutes(fastify);
 
-function snapshotApps() {
-  return registry.list().map((app) => {
-    const status = processManager.getStatus(app.id) || {};
-    const metricsSnapshot = metrics.getSnapshot(app.id) || null;
-    return {
-      ...app,
-      ...status,
-      metricsSnapshot
-    };
-  });
+async function snapshotApps() {
+  return serializeApps(registry.list());
 }
 
 fastify.get('/', (request, reply) => sendStaticFile(request, reply, 'index.html', { fallbackToIndex: false }));
@@ -205,7 +198,9 @@ processManager.events.on('status', (data) => {
     error: data.error
   });
 
-  wsHub.publishList(snapshotApps());
+  snapshotApps()
+    .then((apps) => wsHub.publishList(apps))
+    .catch((error) => fastify.log.error({ err: error }, 'Failed to publish app list'));
 });
 
 logBus.events.on('log', (entry) => {
@@ -239,7 +234,8 @@ async function start() {
     fastify.log.info(`Server listening on http://${HOST}:${PORT}`);
 
     wsHub.broadcast({ type: 'status', message: 'backend-started', port: PORT });
-    wsHub.publishList(snapshotApps());
+    const apps = await snapshotApps();
+    wsHub.publishList(apps);
   } catch (error) {
     fastify.log.error(error);
     process.exit(1);
