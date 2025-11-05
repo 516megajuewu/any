@@ -15,6 +15,7 @@ const packageManager = require('./core/packageManager');
 const appsRoutes = require('./core/routes/apps');
 const logsRoutes = require('./core/routes/logs');
 const metricsRoutes = require('./core/routes/metrics');
+const filesRoutes = require('./core/routes/files');
 
 const isDevMode = process.argv.includes('--dev') || process.env.NODE_ENV === 'development';
 process.env.NODE_ENV = isDevMode ? 'development' : process.env.NODE_ENV || 'production';
@@ -148,21 +149,12 @@ fastify.get('/api/settings', async () => readJsonFile('settings.json', {
   pipIndex: null
 }));
 
-fastify.get('/api/files', async (request, reply) => {
-  const targetPath = request.query?.path || '.';
-  try {
-    const items = await fileService.listDirectory(targetPath, { baseDir: process.cwd() });
-    return { path: targetPath, items };
-  } catch (error) {
-    reply.code(400).send({ error: error.message });
-  }
-});
-
 fastify.get('/api/package-managers/defaults', async () => packageManager.getPackageManagerDefaults());
 
 appsRoutes(fastify);
 logsRoutes(fastify);
 metricsRoutes(fastify);
+filesRoutes(fastify);
 
 function snapshotApps() {
   return registry.list().map((app) => {
