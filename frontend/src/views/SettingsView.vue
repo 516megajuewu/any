@@ -5,11 +5,7 @@
       <p class="subtitle">Configure your development environment</p>
     </div>
 
-    <div v-if="loading" class="loading-skeleton">
-      <div class="skeleton-card"></div>
-      <div class="skeleton-card"></div>
-      <div class="skeleton-card"></div>
-    </div>
+    <LoadingSkeleton v-if="loading" type="card" :rows="3" rowHeight="150px" />
 
     <div v-else class="settings-content">
       <div class="settings-section">
@@ -109,7 +105,8 @@
 
 <script setup lang="ts">
 import { ref, onMounted, watch } from 'vue';
-import { ElMessage } from 'element-plus';
+import { useNotifications } from '@/composables/useNotifications';
+import LoadingSkeleton from '@/components/LoadingSkeleton.vue';
 
 interface Settings {
   ui: {
@@ -125,6 +122,7 @@ interface Settings {
 }
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+const notifications = useNotifications();
 
 const loading = ref(true);
 const saving = ref(false);
@@ -155,7 +153,7 @@ async function loadSettings() {
     };
     originalSettings.value = JSON.parse(JSON.stringify(settings.value));
   } catch (error) {
-    ElMessage.error('Failed to load settings');
+    notifications.error('Failed to load settings');
     console.error(error);
   } finally {
     loading.value = false;
@@ -177,9 +175,9 @@ async function saveSettings() {
     settings.value = data;
     originalSettings.value = JSON.parse(JSON.stringify(settings.value));
     hasChanges.value = false;
-    ElMessage.success('Settings saved successfully');
+    notifications.success('Settings saved successfully');
   } catch (error) {
-    ElMessage.error('Failed to save settings');
+    notifications.error('Failed to save settings');
     console.error(error);
   } finally {
     saving.value = false;
@@ -244,29 +242,6 @@ watch(() => settings.value.ui.theme, (newTheme) => {
   font-size: 1rem;
 }
 
-.loading-skeleton {
-  display: flex;
-  flex-direction: column;
-  gap: 1.5rem;
-}
-
-.skeleton-card {
-  height: 150px;
-  background: linear-gradient(90deg, var(--bg-secondary) 25%, var(--bg-tertiary) 50%, var(--bg-secondary) 75%);
-  background-size: 200% 100%;
-  animation: loading 1.5s infinite;
-  border-radius: 0.75rem;
-}
-
-@keyframes loading {
-  0% {
-    background-position: 200% 0;
-  }
-  100% {
-    background-position: -200% 0;
-  }
-}
-
 .settings-content {
   display: flex;
   flex-direction: column;
@@ -275,9 +250,16 @@ watch(() => settings.value.ui.theme, (newTheme) => {
 
 .settings-section {
   background: var(--bg-secondary);
-  border: 1px solid var(--border-subtle);
+  border: 1px solid var(--border-default);
   border-radius: 0.75rem;
   padding: 1.5rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  transition: all 0.2s ease;
+}
+
+.settings-section:hover {
+  border-color: var(--border-subtle);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
 .settings-section h2 {
@@ -318,7 +300,7 @@ watch(() => settings.value.ui.theme, (newTheme) => {
   border-radius: 0.5rem;
   color: var(--text-primary);
   font-size: 0.875rem;
-  transition: border-color 0.2s;
+  transition: all 0.2s ease;
 }
 
 .setting-item input[type="text"]:focus,
@@ -326,6 +308,13 @@ watch(() => settings.value.ui.theme, (newTheme) => {
 .setting-item select:focus {
   outline: none;
   border-color: var(--accent-primary);
+  box-shadow: 0 0 0 3px var(--accent-light);
+}
+
+.setting-item input[type="text"]:hover,
+.setting-item input[type="password"]:hover,
+.setting-item select:hover {
+  border-color: var(--border-default);
 }
 
 .checkbox-label {
@@ -374,26 +363,44 @@ watch(() => settings.value.ui.theme, (newTheme) => {
 .btn-save {
   background: var(--accent-primary);
   color: white;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
 .btn-save:hover:not(:disabled) {
   background: var(--accent-hover);
   transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+}
+
+.btn-save:active:not(:disabled) {
+  transform: translateY(0);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
 .btn-save:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
 }
 
 .btn-reset {
   background: var(--bg-tertiary);
   color: var(--text-primary);
-  border: 1px solid var(--border-subtle);
+  border: 1px solid var(--border-default);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
 }
 
 .btn-reset:hover:not(:disabled) {
-  background: var(--bg-secondary);
+  background: var(--bg-hover);
+  border-color: var(--border-subtle);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.btn-reset:active:not(:disabled) {
+  transform: translateY(0);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
 }
 
 .btn-reset:disabled {

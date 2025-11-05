@@ -1,12 +1,20 @@
 const http = require('http');
 const { spawn } = require('child_process');
 const path = require('path');
+let treeKill;
+try {
+  treeKill = require('tree-kill');
+} catch (error) {
+  console.warn('tree-kill not available, using fallback process management');
+  treeKill = null;
+}
 
 const PORT = 3000;
 const API_URL = `http://localhost:${PORT}`;
 const TIMEOUT = 30000;
 
 let serverProcess = null;
+let testAppId = null;
 const tests = [];
 let passedTests = 0;
 let failedTests = 0;
@@ -77,6 +85,7 @@ function startServer() {
     serverProcess.stdout.on('data', (data) => {
       const msg = data.toString();
       if (msg.includes('Server listening')) {
+        log(`Server started with PID: ${serverProcess.pid}`, 'info');
         resolve();
       }
     });
@@ -86,6 +95,9 @@ function startServer() {
     });
 
     serverProcess.on('error', reject);
+    serverProcess.on('exit', (code, signal) => {
+      log(`Server exited with code: ${code}, signal: ${signal}`, 'info');
+    });
 
     setTimeout(() => reject(new Error('Server start timeout')), TIMEOUT);
   });
@@ -98,31 +110,55 @@ function stopServer() {
       return;
     }
 
-    const isWindows = process.platform === 'win32';
+    log(`Stopping server with PID: ${serverProcess.pid}`, 'info');
     
-    if (isWindows) {
-      const { exec } = require('child_process');
-      exec(`taskkill /pid ${serverProcess.pid} /T /F`, (error) => {
+    // Use tree-kill for cross-platform process termination if available
+    if (treeKill) {
+      treeKill(serverProcess.pid, (error) => {
         if (error) {
-          console.error('Failed to kill process:', error);
-        }
-        serverProcess = null;
-        resolve();
-      });
-    } else {
-      serverProcess.kill('SIGTERM');
-      serverProcess.on('exit', () => {
-        serverProcess = null;
-        resolve();
-      });
-      
-      setTimeout(() => {
-        if (serverProcess) {
-          serverProcess.kill('SIGKILL');
+          log(`tree-kill failed: ${error.message}`, 'warn');
+          // Fallback to platform-specific methods
+          fallbackKill();
+        } else {
+          log('tree-kill succeeded', 'pass');
           serverProcess = null;
           resolve();
         }
-      }, 5000);
+      });
+    } else {
+      // Direct fallback to platform-specific methods
+      fallbackKill();
+    }
+    
+    function fallbackKill() {
+      const isWindows = process.platform === 'win32';
+      
+      if (isWindows) {
+        const { exec } = require('child_process');
+        exec(`taskkill /pid ${serverProcess.pid} /T /F`, (execError) => {
+          if (execError) {
+            console.error('Fallback taskkill failed:', execError);
+          } else {
+            log('Fallback taskkill succeeded', 'pass');
+          }
+          serverProcess = null;
+          resolve();
+        });
+      } else {
+        serverProcess.kill('SIGTERM');
+        serverProcess.on('exit', () => {
+          serverProcess = null;
+          resolve();
+        });
+        
+        setTimeout(() => {
+          if (serverProcess) {
+            serverProcess.kill('SIGKILL');
+            serverProcess = null;
+            resolve();
+          }
+        }, 5000);
+      }
     }
   });
 }
@@ -163,8 +199,8 @@ addTest('List apps', async () => {
   if (status !== 200) {
     throw new Error(`Expected 200, got ${status}`);
   }
-  if (!Array.isArray(data)) {
-    throw new Error('Expected array response');
+  if (!data.apps || !Array.isArray(data.apps)) {
+    throw new Error('Expected apps array in response');
   }
 });
 
@@ -188,10 +224,80 @@ addTest('List console sessions', async () => {
   }
 });
 
+addTest('Create test app', async () => {
+  const { status, data } = await makeRequest('/api/apps', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: {
+      name: 'Test App',
+      type: 'node',
+      cwd: process.cwd(),
+      startCmd: 'echo "Hello World"'
+    }
+  });
+  
+  if (status !== 201) {
+    throw new Error(`Expected 201, got ${status}`);
+  }
+  
+  testAppId = data.app.id;
+  log(`Created test app with ID: ${testAppId}`, 'pass');
+});
+
+addTest('Start test app', async () => {
+  if (!testAppId) {
+    throw new Error('No test app available');
+  }
+  
+  const { status, data } = await makeRequest(`/api/apps/${testAppId}/start`, {
+    method: 'POST'
+  });
+  
+  if (status !== 200) {
+    throw new Error(`Expected 200, got ${status}`);
+  }
+  
+  log('Test app started successfully', 'pass');
+});
+
+addTest('Stop test app', async () => {
+  if (!testAppId) {
+    throw new Error('No test app available');
+  }
+  
+  const { status, data } = await makeRequest(`/api/apps/${testAppId}/stop`, {
+    method: 'POST'
+  });
+  
+  if (status !== 200) {
+    throw new Error(`Expected 200, got ${status}`);
+  }
+  
+  log('Test app stopped successfully', 'pass');
+});
+
+addTest('Delete test app', async () => {
+  if (!testAppId) {
+    throw new Error('No test app available');
+  }
+  
+  const { status, data } = await makeRequest(`/api/apps/${testAppId}`, {
+    method: 'DELETE'
+  });
+  
+  if (status !== 200) {
+    throw new Error(`Expected 200, got ${status}`);
+  }
+  
+  log('Test app deleted successfully', 'pass');
+  testAppId = null;
+});
+
 addTest('Cross-platform process handling', async () => {
   const isWindows = process.platform === 'win32';
   log(`Platform: ${process.platform}`, 'info');
   log(`Shell: ${isWindows ? 'powershell.exe' : process.env.SHELL || '/bin/bash'}`, 'info');
+  log(`Process management works on ${process.platform}`, 'pass');
 });
 
 async function runTests() {

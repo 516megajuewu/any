@@ -1,11 +1,37 @@
 const path = require('path');
 const fileService = require('../fileService');
 
+async function readSettings() {
+  const fs = require('fs');
+  const dataPath = path.join(process.cwd(), 'data');
+  
+  try {
+    const raw = await fs.promises.readFile(path.join(dataPath, 'settings.json'), 'utf8');
+    return JSON.parse(raw || 'null');
+  } catch (error) {
+    return {
+      ui: {},
+      pkgManagers: { node: 'npm', python: 'pip' },
+      pipIndex: null,
+      allowRootBrowse: false,
+      authToken: null
+    };
+  }
+}
+
 async function filesRoutes(fastify) {
   fastify.get('/api/files', async (request, reply) => {
     const { base = 'apps', path: targetPath = '.' } = request.query || {};
 
     try {
+      const settings = await readSettings();
+      
+      // Check if root browsing is allowed and base is 'root'
+      if (base === 'root' && !settings.allowRootBrowse) {
+        reply.code(403);
+        return { error: 'Root browsing is disabled. Enable it in settings.' };
+      }
+
       const result = await fileService.listDirectory(targetPath, { base });
       return result;
     } catch (error) {
@@ -24,6 +50,14 @@ async function filesRoutes(fastify) {
     }
 
     try {
+      const settings = await readSettings();
+      
+      // Check if root browsing is allowed and base is 'root'
+      if (base === 'root' && !settings.allowRootBrowse) {
+        reply.code(403);
+        return { error: 'Root browsing is disabled. Enable it in settings.' };
+      }
+
       const content = await fileService.readFile(targetPath, { base });
       return { content };
     } catch (error) {
@@ -47,6 +81,14 @@ async function filesRoutes(fastify) {
     }
 
     try {
+      const settings = await readSettings();
+      
+      // Check if root browsing is allowed and base is 'root'
+      if (base === 'root' && !settings.allowRootBrowse) {
+        reply.code(403);
+        return { error: 'Root browsing is disabled. Enable it in settings.' };
+      }
+
       await fileService.writeFile(targetPath, content, { base });
       return { success: true, path: targetPath };
     } catch (error) {
@@ -65,6 +107,14 @@ async function filesRoutes(fastify) {
     }
 
     try {
+      const settings = await readSettings();
+      
+      // Check if root browsing is allowed and base is 'root'
+      if (base === 'root' && !settings.allowRootBrowse) {
+        reply.code(403);
+        return { error: 'Root browsing is disabled. Enable it in settings.' };
+      }
+
       await fileService.makeDirectory(targetPath, { base });
       return { success: true, path: targetPath };
     } catch (error) {
@@ -88,6 +138,14 @@ async function filesRoutes(fastify) {
     }
 
     try {
+      const settings = await readSettings();
+      
+      // Check if root browsing is allowed and base is 'root'
+      if (base === 'root' && !settings.allowRootBrowse) {
+        reply.code(403);
+        return { error: 'Root browsing is disabled. Enable it in settings.' };
+      }
+
       await fileService.rename(src, dest, { base, overwrite });
       return { success: true, src, dest };
     } catch (error) {
@@ -106,6 +164,14 @@ async function filesRoutes(fastify) {
     }
 
     try {
+      const settings = await readSettings();
+      
+      // Check if root browsing is allowed and base is 'root'
+      if (base === 'root' && !settings.allowRootBrowse) {
+        reply.code(403);
+        return { error: 'Root browsing is disabled. Enable it in settings.' };
+      }
+
       await fileService.remove(targetPath, { base });
       return { success: true, path: targetPath };
     } catch (error) {
@@ -129,6 +195,13 @@ async function filesRoutes(fastify) {
     }
 
     try {
+      const settings = await readSettings();
+      
+      // Check if root browsing is allowed and base is 'root'
+      if (base === 'root' && !settings.allowRootBrowse) {
+        reply.code(403);
+        return { error: 'Root browsing is disabled. Enable it in settings.' };
+      }
       const isZip = file.originalname.toLowerCase().endsWith('.zip');
       const destinationDir = fileService.resolveSafePath(targetPath, { base });
 
