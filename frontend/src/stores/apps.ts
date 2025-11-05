@@ -25,6 +25,18 @@ interface AppProcessStatus {
   restarts: number;
 }
 
+interface AppLogEntryModel {
+  timestamp: number;
+  stream: string;
+  line: string;
+}
+
+interface AppActivityEventModel {
+  type: string;
+  message?: string;
+  timestamp: number;
+}
+
 export interface AppModel extends AppProcessStatus {
   name: string;
   type: string;
@@ -33,6 +45,14 @@ export interface AppModel extends AppProcessStatus {
   env: Record<string, string>;
   metricsSnapshot?: AppMetricsSnapshot | null;
   metricsHistory: AppMetricsPoint[];
+  filesCount: number | null;
+  createdAt: number | null;
+  updatedAt: number | null;
+  installState: 'idle' | 'installing' | 'success' | 'error';
+  lastInstallAt: number | null;
+  installMessage: string | null;
+  lastLogEntry: AppLogEntryModel | null;
+  lastEvent: AppActivityEventModel | null;
   isInstalling: boolean;
   isWorking: boolean;
 }
@@ -61,7 +81,7 @@ function normalizeMetrics(value?: number | null) {
   return Math.max(0, Math.round(value * 10) / 10);
 }
 
-function createEmptyAppModel(app: Partial<AppModel> & { id: string; name: string; type: string; cwd: string; startCmd: string; env: Record<string, string> }) {
+function createAppModel(app: Partial<AppModel> & { id: string; name: string; type: string; cwd: string; startCmd: string; env: Record<string, string> }) {
   return {
     id: app.id,
     name: app.name,
@@ -78,9 +98,17 @@ function createEmptyAppModel(app: Partial<AppModel> & { id: string; name: string
     error: app.error ?? null,
     restarts: app.restarts ?? 0,
     metricsSnapshot: app.metricsSnapshot ?? null,
-    metricsHistory: app.metricsHistory ?? [],
-    isInstalling: false,
-    isWorking: false
+    metricsHistory: Array.isArray(app.metricsHistory) ? app.metricsHistory.slice() : [],
+    filesCount: app.filesCount ?? null,
+    createdAt: app.createdAt ?? null,
+    updatedAt: app.updatedAt ?? null,
+    installState: app.installState ?? (app.isInstalling ? 'installing' : 'idle'),
+    lastInstallAt: app.lastInstallAt ?? null,
+    installMessage: app.installMessage ?? null,
+    lastLogEntry: app.lastLogEntry ?? null,
+    lastEvent: app.lastEvent ?? null,
+    isInstalling: app.isInstalling ?? false,
+    isWorking: app.isWorking ?? false
   } as AppModel;
 }
 
@@ -173,10 +201,10 @@ export const useAppsStore = defineStore('apps', {
         const response = await apiClient.get('/api/apps');
         const apps = Array.isArray(response.data?.apps) ? response.data.apps : [];
         this.apps = apps.map((app: AppModel) => {
-          const model = createEmptyAppModel(app);
+          const model = createAppModel(app);
           if (app.metricsSnapshot) {
             pushMetrics(model, {
-              timestamp: Date.now(),
+              timestamp: app.metricsSnapshot?.timestamp ?? Date.now(),
               cpu: app.metricsSnapshot?.cpu ?? 0,
               memory: app.metricsSnapshot?.memory ?? 0
             });
@@ -214,8 +242,15 @@ export const useAppsStore = defineStore('apps', {
               this.handleMetricsUpdate(appId, payload);
             }
             break;
+          case 'app.install':
+            if (appId) {
+              this.handleInstallUpdate(appId, payload ?? {});
+            }
+            break;
           case 'app.logs':
-            // handled in console modal when implemented
+            if (appId) {
+              this.handleLogEntry(appId, payload);
+            }
             break;
           default:
             break;
@@ -237,14 +272,28 @@ export const useAppsStore = defineStore('apps', {
       };
     },
     handleAppList(apps: any[]) {
-      const models = apps.map((app) => createEmptyAppModel(app));
+      const models = apps.map((app) => createAppModel(app));
       this.apps = models.map((model) => {
         const existing = this.apps.find((item) => item.id === model.id);
         if (existing) {
           model.metricsHistory = existing.metricsHistory.slice(-MAX_HISTORY_POINTS);
-          if (existing.metricsSnapshot) {
+          if (!model.metricsSnapshot && existing.metricsSnapshot) {
             model.metricsSnapshot = existing.metricsSnapshot;
           }
+          if (existing.installState && model.installState === 'idle' && existing.installState !== 'idle') {
+            model.installState = existing.installState;
+          }
+          if (existing.isInstalling) {
+            model.isInstalling = true;
+          }
+          if (!model.installMessage && existing.installMessage) {
+            model.installMessage = existing.installMessage;
+          }
+          if (!model.lastInstallAt && existing.lastInstallAt) {
+            model.lastInstallAt = existing.lastInstallAt;
+          }
+          model.lastLogEntry = existing.lastLogEntry;
+          model.lastEvent = existing.lastEvent;
         }
         return model;
       });
@@ -252,16 +301,59 @@ export const useAppsStore = defineStore('apps', {
         this.order = this.apps.map((app) => app.id);
       }
     },
-    handleStatusUpdate(appId: string, status: Partial<AppProcessStatus>) {
+    handleStatusUpdate(appId: string, status: Partial<AppProcessStatus> & { updatedAt?: number }) {
       const existing = this.apps.find((app) => app.id === appId);
       if (!existing) {
-        const model = createEmptyAppModel({ id: appId, name: appId, type: 'node', cwd: '', startCmd: '', env: {}, status: status.status ?? 'stopped' });
+        const model = createAppModel({
+          id: appId,
+          name: appId,
+          type: 'node',
+          cwd: '',
+          startCmd: '',
+          env: {},
+          status: status.status ?? 'stopped',
+          pid: status.pid ?? null,
+          startTime: status.startTime ?? null,
+          stopTime: status.stopTime ?? null,
+          exitCode: status.exitCode ?? null,
+          signal: status.signal ?? null,
+          error: status.error ?? null,
+          restarts: status.restarts ?? 0
+        });
         mergeStatus(model, status);
+        model.updatedAt = status.updatedAt ?? Date.now();
+        model.lastEvent = {
+          type: 'status',
+          message: status.error ?? status.status ?? model.status,
+          timestamp: model.updatedAt
+        };
         this.apps.push(model);
         return;
       }
+      const previousStatus = existing.status;
       mergeStatus(existing, status);
       existing.isWorking = false;
+      const updatedAt = status.updatedAt ?? (previousStatus !== existing.status || status.error ? Date.now() : existing.updatedAt ?? Date.now());
+      existing.updatedAt = updatedAt;
+      if (status.error) {
+        existing.lastEvent = {
+          type: 'status',
+          message: status.error,
+          timestamp: updatedAt
+        };
+      } else if (status.exitCode !== undefined && status.exitCode !== null) {
+        existing.lastEvent = {
+          type: 'status',
+          message: `Exited with code ${status.exitCode}`,
+          timestamp: updatedAt
+        };
+      } else if (status.status && previousStatus !== status.status) {
+        existing.lastEvent = {
+          type: 'status',
+          message: status.status,
+          timestamp: updatedAt
+        };
+      }
     },
     handleMetricsUpdate(appId: string, metrics: AppMetricsSnapshot | undefined) {
       if (!metrics) {
@@ -276,6 +368,92 @@ export const useAppsStore = defineStore('apps', {
         cpu: metrics.cpu ?? 0,
         memory: metrics.memory ?? 0
       });
+    },
+    handleInstallUpdate(appId: string, info: any) {
+      const app = this.apps.find((item) => item.id === appId);
+      if (!app) {
+        return;
+      }
+      const status = typeof info?.status === 'string' ? info.status : '';
+      const message = typeof info?.message === 'string' ? info.message : info?.error ?? null;
+      const timestamp = typeof info?.timestamp === 'number' ? info.timestamp : Date.now();
+
+      switch (status) {
+        case 'started':
+          app.installState = 'installing';
+          app.isInstalling = true;
+          app.lastInstallAt = timestamp;
+          app.installMessage = message ?? 'Installing dependencies…';
+          break;
+        case 'progress':
+          app.lastInstallAt = timestamp;
+          if (message) {
+            app.installMessage = message;
+          }
+          break;
+        case 'completed':
+          app.installState = 'success';
+          app.isInstalling = false;
+          app.lastInstallAt = timestamp;
+          app.installMessage = message ?? 'Dependencies installed';
+          app.lastEvent = {
+            type: 'install',
+            message: app.installMessage,
+            timestamp
+          };
+          break;
+        case 'failed':
+          app.installState = 'error';
+          app.isInstalling = false;
+          app.lastInstallAt = timestamp;
+          app.installMessage = message ?? 'Install failed';
+          app.lastEvent = {
+            type: 'install',
+            message: app.installMessage,
+            timestamp
+          };
+          if (typeof info?.exitCode === 'number') {
+            app.exitCode = info.exitCode;
+          }
+          if (info?.signal !== undefined) {
+            app.signal = info.signal ?? null;
+          }
+          break;
+        default:
+          break;
+      }
+      if (status === 'completed' || status === 'failed') {
+        app.updatedAt = timestamp;
+      }
+    },
+    handleLogEntry(appId: string, payload: any) {
+      const app = this.apps.find((item) => item.id === appId);
+      if (!app) {
+        return;
+      }
+      if (payload?.reset) {
+        app.lastLogEntry = null;
+        return;
+      }
+      const lineSource = typeof payload?.line === 'string'
+        ? payload.line
+        : typeof payload === 'string'
+          ? payload
+          : payload?.message ?? '';
+      const line = lineSource.length > 280 ? `${lineSource.slice(0, 277)}…` : lineSource;
+      const entry: AppLogEntryModel = {
+        timestamp: typeof payload?.timestamp === 'number' ? payload.timestamp : Date.now(),
+        stream: typeof payload?.stream === 'string' ? payload.stream : 'stdout',
+        line
+      };
+      app.lastLogEntry = entry;
+      if (entry.stream === 'stderr') {
+        app.lastEvent = {
+          type: 'log',
+          message: entry.line,
+          timestamp: entry.timestamp
+        };
+      }
     },
     async startApp(appId: string) {
       const app = this.apps.find((item) => item.id === appId);
@@ -330,12 +508,35 @@ export const useAppsStore = defineStore('apps', {
         return;
       }
       app.isInstalling = true;
+      app.installState = 'installing';
+      app.installMessage = 'Installing dependencies…';
+      app.lastInstallAt = Date.now();
       try {
         await apiClient.post(`/api/apps/${appId}/install`, payload);
-      } catch (error) {
-        throw error;
-      } finally {
         app.isInstalling = false;
+        const completedAt = Date.now();
+        app.lastInstallAt = completedAt;
+        if (app.installState === 'installing') {
+          app.installState = 'success';
+          app.installMessage = app.installMessage ?? 'Dependencies installed';
+          app.lastEvent = {
+            type: 'install',
+            message: app.installMessage,
+            timestamp: completedAt
+          };
+        }
+      } catch (error: any) {
+        app.isInstalling = false;
+        const failedAt = Date.now();
+        app.lastInstallAt = failedAt;
+        app.installState = 'error';
+        app.installMessage = error?.response?.data?.error ?? error?.message ?? 'Install failed';
+        app.lastEvent = {
+          type: 'install',
+          message: app.installMessage,
+          timestamp: failedAt
+        };
+        throw error;
       }
     }
   }
