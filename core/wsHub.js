@@ -293,8 +293,16 @@ function publishList(apps) {
 
 function publishCoreReload(info) {
   broadcast({
-    type: 'core:reloaded',
+    type: 'core:reload',
     info,
+    timestamp: Date.now()
+  });
+}
+
+function publishCoreError(error) {
+  broadcast({
+    type: 'core:error',
+    error,
     timestamp: Date.now()
   });
 }
@@ -336,6 +344,7 @@ module.exports = {
   publishLog,
   publishList,
   publishCoreReload,
+  publishCoreError,
   shutdown,
   clients,
   channels,

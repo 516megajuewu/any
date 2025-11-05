@@ -174,13 +174,51 @@ consoleManager.init();
 
 let hotReloadEmitter;
 if (isDevMode) {
-  hotReloadEmitter = setupHotReload({ watchDir: path.join(__dirname, 'core') });
+  hotReloadEmitter = setupHotReload({
+    watchDir: path.join(__dirname, 'core'),
+    callbacks: {
+      onReload: async (info) => {
+        fastify.log.info({ module: info.relativePath }, 'Core module reloaded');
+        
+        // Log successful reload
+        try {
+          const logMessage = `Hot reload: ${info.relativePath} (${info.event})`;
+          fastify.log.info(logMessage);
+        } catch (logError) {
+          fastify.log.error({ err: logError }, 'Error logging reload');
+        }
+      },
+      onRouteReload: async (info) => {
+        fastify.log.info({ module: info.relativePath }, 'Route module reloaded - manual restart may be needed for route changes');
+      },
+      onMetricsReload: async (info) => {
+        fastify.log.info({ module: info.relativePath }, 'Metrics module reloaded - metrics tracking continues');
+      },
+      onProcessManagerReload: async (info) => {
+        fastify.log.info({ module: info.relativePath }, 'Process manager module reloaded - running processes unaffected');
+      }
+    }
+  });
+
   hotReloadEmitter.on('reload', (event) => {
     wsHub.publishCoreReload(event);
+    fastify.log.info({ 
+      file: event.relativePath, 
+      type: event.event,
+      deletedModules: event.deletedModules 
+    }, 'Core module hot-reloaded successfully');
   });
+
   hotReloadEmitter.on('error', (error) => {
-    fastify.log.error({ err: error }, 'Hot reload watcher error');
+    wsHub.publishCoreError(error);
+    fastify.log.error({ 
+      err: error, 
+      type: error.type,
+      file: error.relativePath || error.filePath 
+    }, `Hot reload error: ${error.message || 'Unknown error'}`);
   });
+
+  fastify.log.info('Hot reload enabled for core modules');
 }
 
 processManager.events.on('status', (data) => {
