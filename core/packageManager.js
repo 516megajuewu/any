@@ -1,24 +1,42 @@
 const { spawn } = require('child_process');
 const path = require('path');
+const logBus = require('./logBus');
 
-function runCommand(command, args, options = {}) {
+const isWindows = process.platform === 'win32';
+
+function spawnWithLogs(appId, command, args, options = {}) {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, {
       cwd: options.cwd || process.cwd(),
       env: { ...process.env, ...options.env },
-      stdio: options.stdio || 'inherit',
-      shell: options.shell || false
+      shell: isWindows,
+      stdio: ['ignore', 'pipe', 'pipe']
     });
 
-    child.on('error', (error) => reject(error));
+    const commandLine = `${command} ${args.join(' ')}`.trim();
+    logBus.append(appId, 'stdout', `[pkg] Running ${commandLine}`);
+
+    child.stdout?.on('data', (chunk) => {
+      logBus.append(appId, 'stdout', chunk);
+    });
+
+    child.stderr?.on('data', (chunk) => {
+      logBus.append(appId, 'stderr', chunk);
+    });
+
+    child.on('error', (error) => {
+      logBus.append(appId, 'stderr', `[pkg] Error: ${error.message}`);
+      logBus.flushPending(appId);
+      reject(error);
+    });
 
     child.on('close', (code, signal) => {
+      logBus.append(appId, code === 0 ? 'stdout' : 'stderr', `[pkg] Exit code: ${code}${signal ? ` (signal ${signal})` : ''}`);
+      logBus.flushPending(appId);
       if (code === 0) {
         resolve({ code, signal });
       } else {
-        const error = new Error(
-          `${command} ${args.join(' ')} exited with code ${code}`
-        );
+        const error = new Error(`${command} exited with code ${code}`);
         error.exitCode = code;
         error.signal = signal;
         reject(error);
@@ -27,67 +45,25 @@ function runCommand(command, args, options = {}) {
   });
 }
 
-function buildNodeCommand(packages, options = {}) {
-  const manager = options.manager || 'npm';
-  const pkgList = Array.isArray(packages) ? packages : [packages];
-
-  switch (manager) {
-    case 'yarn':
-      return { command: 'yarn', args: ['add', options.saveDev ? '--dev' : null, ...pkgList].filter(Boolean) };
-    case 'pnpm':
-      return { command: 'pnpm', args: ['add', options.saveDev ? '--save-dev' : null, ...pkgList].filter(Boolean) };
-    case 'npm':
-    default:
-      return { command: 'npm', args: ['install', options.saveDev ? '--save-dev' : null, ...pkgList].filter(Boolean) };
-  }
+function installNode(appId, manager = 'npm', args = [], options = {}) {
+  const normalizedManager = manager || 'npm';
+  const finalArgs = Array.isArray(args) && args.length > 0 ? args.slice() : ['install'];
+  return spawnWithLogs(appId, normalizedManager, finalArgs, options);
 }
 
-function buildPythonCommand(packages, options = {}) {
-  const manager = options.manager || 'pip';
-  const pkgList = Array.isArray(packages) ? packages : [packages];
+function installPython(appId, manager = 'pip', args = [], options = {}) {
+  const normalizedManager = manager || 'pip';
+  const finalArgs = Array.isArray(args) ? args.slice() : [];
 
-  if (manager === 'pipenv') {
-    const args = ['install'];
-    if (options.dev) {
-      args.push('--dev');
-    }
-    return { command: 'pipenv', args: [...args, ...pkgList] };
+  if (options.indexUrl) {
+    finalArgs.push('--index-url', options.indexUrl);
   }
 
-  if (manager === 'poetry') {
-    const args = ['add'];
-    if (options.dev) {
-      args.push('--group', typeof options.dev === 'string' ? options.dev : 'dev');
-    }
-    return { command: 'poetry', args: [...args, ...pkgList] };
+  if (finalArgs.length === 0) {
+    finalArgs.push('install');
   }
 
-  const args = ['install'];
-  if (options.requirements) {
-    args.push('-r', options.requirements);
-  }
-
-  return { command: manager, args: [...args, ...pkgList] };
-}
-
-async function installNodePackages(packages, options = {}) {
-  const descriptor = buildNodeCommand(packages, options);
-
-  if (options.dryRun !== false) {
-    return { ...descriptor, dryRun: true };
-  }
-
-  return runCommand(descriptor.command, descriptor.args, options);
-}
-
-async function installPythonPackages(packages, options = {}) {
-  const descriptor = buildPythonCommand(packages, options);
-
-  if (options.dryRun !== false) {
-    return { ...descriptor, dryRun: true };
-  }
-
-  return runCommand(descriptor.command, descriptor.args, options);
+  return spawnWithLogs(appId, normalizedManager, finalArgs, options);
 }
 
 function getPackageManagerDefaults() {
@@ -100,8 +76,7 @@ function getPackageManagerDefaults() {
 }
 
 module.exports = {
-  installNodePackages,
-  installPythonPackages,
-  getPackageManagerDefaults,
-  runCommand
+  installNode,
+  installPython,
+  getPackageManagerDefaults
 };
