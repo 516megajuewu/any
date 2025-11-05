@@ -3,21 +3,17 @@ const processManager = require('../processManager');
 const metrics = require('../metrics');
 const packageManager = require('../packageManager');
 const wsHub = require('../wsHub');
-
-function buildAppResponse(app) {
-  const status = processManager.getStatus(app.id);
-  const metricsSnapshot = metrics.getSnapshot(app.id);
-
-  return {
-    ...app,
-    ...(status || {}),
-    metricsSnapshot
-  };
-}
+const { serializeApp, serializeApps } = require('../appSerializer');
 
 async function appsRoutes(fastify) {
+  const broadcastAppList = async () => {
+    const apps = await serializeApps(registry.list());
+    wsHub.publishList(apps);
+    return apps;
+  };
+
   fastify.get('/api/apps', async () => {
-    const apps = registry.list().map(buildAppResponse);
+    const apps = await serializeApps(registry.list());
     return { apps };
   });
 
@@ -37,11 +33,11 @@ async function appsRoutes(fastify) {
       env: env && typeof env === 'object' ? env : {}
     });
 
-    const apps = registry.list().map(buildAppResponse);
-    wsHub.publishList(apps);
+    const serializedApp = await serializeApp(app);
+    await broadcastAppList();
 
     reply.code(201);
-    return { app: buildAppResponse(app) };
+    return { app: serializedApp };
   });
 
   fastify.patch('/api/apps/:id', async (request, reply) => {
@@ -104,10 +100,10 @@ async function appsRoutes(fastify) {
     }
 
     const updated = registry.update(id, updates);
-    const apps = registry.list().map(buildAppResponse);
-    wsHub.publishList(apps);
+    const serialized = await serializeApp(updated);
+    await broadcastAppList();
 
-    return { app: buildAppResponse(updated) };
+    return { app: serialized };
   });
 
   fastify.delete('/api/apps/:id', async (request, reply) => {
@@ -128,8 +124,7 @@ async function appsRoutes(fastify) {
     metrics.track(id, null);
     registry.remove(id);
 
-    const apps = registry.list().map(buildAppResponse);
-    wsHub.publishList(apps);
+    await broadcastAppList();
 
     return { success: true, id };
   });
@@ -158,8 +153,9 @@ async function appsRoutes(fastify) {
 
       metrics.track(id, result.pid);
       const status = processManager.getStatus(id);
+      const serializedApp = await serializeApp(registry.get(id));
 
-      return { app: buildAppResponse(registry.get(id)), result: status };
+      return { app: serializedApp, result: status };
     } catch (error) {
       reply.code(500);
       return { error: error.message };
@@ -179,9 +175,9 @@ async function appsRoutes(fastify) {
       const result = await processManager.stopApp(id);
       metrics.track(id, null);
 
-      const status = processManager.getStatus(id) || { status: 'stopped', pid: null };
+      const serializedApp = await serializeApp(registry.get(id));
 
-      return { app: buildAppResponse(registry.get(id)), result };
+      return { app: serializedApp, result };
     } catch (error) {
       reply.code(500);
       return { error: error.message };
@@ -207,8 +203,9 @@ async function appsRoutes(fastify) {
       metrics.track(id, result.pid);
 
       const status = processManager.getStatus(id);
+      const serializedApp = await serializeApp(registry.get(id));
 
-      return { app: buildAppResponse(registry.get(id)), result: status };
+      return { app: serializedApp, result: status };
     } catch (error) {
       reply.code(500);
       return { error: error.message };
@@ -224,27 +221,55 @@ async function appsRoutes(fastify) {
       return { error: 'App not found' };
     }
 
+    if (app.type === 'cli') {
+      reply.code(400);
+      return { error: 'Package install not supported for CLI apps' };
+    }
+
     const { manager, args = [], indexUrl } = request.body || {};
+    const normalizedManager = manager || (app.type === 'python' ? 'pip' : 'npm');
+
+    wsHub.publish('app.install', {
+      status: 'started',
+      manager: normalizedManager,
+      args,
+      timestamp: Date.now()
+    }, { appId: id });
 
     try {
       if (app.type === 'python') {
-        await packageManager.installPython(id, manager || 'pip', args, {
+        await packageManager.installPython(id, normalizedManager, args, {
           cwd: app.cwd,
           env: app.env,
           indexUrl
         });
-      } else if (app.type === 'cli') {
-        reply.code(400);
-        return { error: 'Package install not supported for CLI apps' };
       } else {
-        await packageManager.installNode(id, manager || 'npm', args, {
+        await packageManager.installNode(id, normalizedManager, args, {
           cwd: app.cwd,
           env: app.env
         });
       }
 
+      wsHub.publish('app.install', {
+        status: 'completed',
+        manager: normalizedManager,
+        timestamp: Date.now(),
+        message: 'Dependencies installed'
+      }, { appId: id });
+
+      await broadcastAppList();
+
       return { success: true };
     } catch (error) {
+      wsHub.publish('app.install', {
+        status: 'failed',
+        manager: normalizedManager,
+        message: error.message,
+        exitCode: error.exitCode ?? null,
+        signal: error.signal ?? null,
+        timestamp: Date.now()
+      }, { appId: id });
+
       reply.code(500);
       return {
         error: error.message,

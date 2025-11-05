@@ -6,8 +6,8 @@
         <span class="app-logo__title">Control Center</span>
       </div>
       <el-menu :default-active="activeRoute" class="app-menu" @select="onSelect">
-        <el-menu-item index="/">
-          <span>Dashboard</span>
+        <el-menu-item index="/apps">
+          <span>Apps</span>
         </el-menu-item>
         <el-menu-item index="/files">
           <span>Files</span>
@@ -52,9 +52,9 @@ const pageTitle = computed(() => {
   switch (route.name) {
     case 'files':
       return 'Files';
-    case 'dashboard':
+    case 'apps':
     default:
-      return 'Dashboard';
+      return 'Applications';
   }
 });
 
