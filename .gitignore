@@ -1,36 +1,22 @@
-# Byte-compiled / optimized / DLL files
-__pycache__/
-*.py[cod]
-*$py.class
+# Dependencies
+node_modules/
+frontend/node_modules/
 
-# Virtual environments
-.venv/
-venv/
-env/
+# Build outputs
+html/**
+!html/.gitkeep
+frontend/dist/
 
-# Distribution / packaging
-build/
-dist/
-.eggs/
-*.egg-info/
+# Logs
+logs/**
+!logs/.gitkeep
+data/*.log
 
-# PyInstaller
-*.manifest
-*.spec
+# Environment
+.env
 
-# Unit test / coverage reports
-htmlcov/
-.tox/
-.nox/
-.coverage
-.coverage.*
-.cache
-.pytest_cache/
+# Backups
+_backup_*/
 
-# IDEs and editors
-.vscode/
-.idea/
-*.swp
-
-# OS files
+# Misc
 .DS_Store

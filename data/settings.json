@@ -1,0 +1,8 @@
+{
+  "ui": {},
+  "pkgManagers": {
+    "node": "npm",
+    "python": "pip"
+  },
+  "pipIndex": null
+}

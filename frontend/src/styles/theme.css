@@ -1,0 +1,40 @@
+:root {
+  --surface: #1f2937;
+  --surface-stronger: #111827;
+  --surface-subtle: #0f172a;
+  --border-subtle: rgba(148, 163, 184, 0.16);
+  --text-default: #cbd5f5;
+  --text-muted: rgba(148, 163, 184, 0.78);
+  --text-emphasis: #f8fafc;
+  --primary: #2563eb;
+  --primary-accent: #38bdf8;
+  --success: #22c55e;
+  --success-strong: #34d399;
+  --warning: #facc15;
+  --danger: #f87171;
+  --danger-strong: #fb7185;
+}
+
+body {
+  background: var(--surface-subtle);
+}
+
+.el-card {
+  background-color: var(--surface);
+  border: 1px solid rgba(148, 163, 184, 0.12);
+}
+
+.el-container,
+.el-aside,
+.el-header,
+.el-main {
+  background-color: transparent;
+}
+
+.el-menu {
+  background-color: transparent;
+}
+
+.el-timeline-item__node {
+  box-shadow: 0 0 0 2px rgba(148, 163, 184, 0.15);
+}
