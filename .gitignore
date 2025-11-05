@@ -46,4 +46,26 @@ build/
 *.swp
 .idea/
 .vscode/
+# Dependencies
+node_modules/
+frontend/node_modules/
+
+# Build outputs
+html/**
+!html/.gitkeep
+frontend/dist/
+
+# Logs
+logs/**
+!logs/.gitkeep
+data/*.log
+*.log
+
+# Environment
+.env
+
+# Backups
+_backup_*/
+
+# Misc
 .DS_Store
