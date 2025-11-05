@@ -1,3 +1,51 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Diagnostic reports
+report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Dependency directories
+node_modules/
+jspm_packages/
+bower_components/
+
+# Build directories
+lib-cov
+coverage/
+.nyc_output/
+.grunt/
+dist/
+build/
+.next/
+.nuxt/
+.snowpack/
+
+# Caches
+.eslintcache
+.stylelintcache
+.cache/
+
+# Environment files
+.env
+.env.*
+
+# Misc
+*.tgz
+*.swp
+.idea/
+.vscode/
 # Dependencies
 node_modules/
 frontend/node_modules/
