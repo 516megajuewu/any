@@ -7,38 +7,77 @@
     @drop.prevent="onDrop"
   >
     <div class="files-layout">
-
+      <div class="explorer-panel">
         <FileExplorer
-          :base="currentBase"
-          :path="currentPath"
-          :items="files"
-          :loading="loading"
-          :selected-path="selectedPath"
-          :view-mode="viewMode"
+          :base="base.value"
+          :path="path.value"
+          :items="items.value"
+          :loading="loading.value"
+          :selected-path="selectedPath.value"
+          :view-mode="viewMode.value"
+          :search-query="searchQuery.value"
+          :allow-root-access="allowRootBrowsing.value"
+          :allow-mutations="canMutate.value"
           @update:base="handleBaseUpdate"
           @update:path="handlePathUpdate"
           @update:selected-path="handleSelectionUpdate"
           @update:view-mode="handleViewModeUpdate"
-          @refresh="loadFiles"
+          @update:search-query="handleSearchUpdate"
+          @refresh="refreshCurrentDirectory"
           @create-file="handleCreateFile"
           @create-folder="handleCreateFolder"
           @rename="handleRename"
           @delete="handleDelete"
           @upload="handleUploadTrigger"
-          @select="handleFileSelect"
-          @open="handleFileOpen"
+          @select="handleSelect"
+          @open="handleOpenEntry"
         />
+
+        <div v-if="recentItems.length" class="recent-section">
+          <div class="recent-title">Recently opened</div>
+          <div class="recent-chips">
+            <el-tag
+              v-for="item in recentItems"
+              :key="item.base + item.path"
+              size="small"
+              effect="plain"
+              class="recent-chip"
+              @click="openRecent(item)"
+            >
+              {{ item.name }}
+            </el-tag>
+          </div>
+        </div>
       </div>
 
       <div class="editor-panel">
-        <div v-if="!openFile" class="editor-placeholder">
+        <div class="editor-header">
+          <div class="editor-meta">
+            <el-tag size="small" effect="plain">{{ baseLabel }}</el-tag>
+            <span class="editor-path">/{{ pathDisplay }}</span>
+            <el-tag
+              v-if="hasUnsavedChanges.value"
+              type="warning"
+              size="small"
+              effect="plain"
+            >
+              Unsaved
+            </el-tag>
+          </div>
+          <el-button size="small" :loading="loading.value" @click="refreshCurrentDirectory">
+            <el-icon><RefreshIcon /></el-icon>
+            Refresh
+          </el-button>
+        </div>
+
+        <div v-if="!openFile.value" class="editor-placeholder">
           <el-empty description="Select a file to edit" image-size="150" />
         </div>
         <MonacoEditor
           v-else
-          v-model="fileContent"
-          :file-path="openFile.path"
-          @save="handleFileSave"
+          v-model="editorContent"
+          :file-path="openFile.value.path"
+          @save="handleEditorSave"
         />
       </div>
     </div>
@@ -57,7 +96,7 @@
     >
       <div class="upload-content">
         <el-alert
-          v-if="uploadFiles.length === 1"
+          v-if="uploadFilesBuffer.length === 1"
           type="info"
           :closable="false"
           show-icon
@@ -66,9 +105,9 @@
         </el-alert>
 
         <div class="upload-list">
-          <div class="upload-header">Files to upload ({{ uploadFiles.length }}):</div>
+          <div class="upload-header">Files to upload ({{ uploadFilesBuffer.length }}):</div>
           <div class="files-container">
-            <div v-for="(file, i) in uploadFiles" :key="i" class="file-row">
+            <div v-for="(file, i) in uploadFilesBuffer" :key="i" class="file-row">
               {{ file.name }} <span class="file-size">({{ formatSize(file.size) }})</span>
             </div>
           </div>
@@ -86,7 +125,7 @@
       </div>
 
       <template #footer>
-        <el-button @click="uploadDialogVisible = false">Cancel</el-button>
+        <el-button @click="closeUploadDialog">Cancel</el-button>
         <el-button type="primary" :loading="uploading" @click="submitUpload">
           Upload
         </el-button>
@@ -96,212 +135,161 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue';
-import { ElMessage } from 'element-plus';
-import { Upload as UploadIcon } from '@element-plus/icons-vue';
+import { computed, onMounted, ref } from 'vue';
+import { Refresh as RefreshIcon, Upload as UploadIcon } from '@element-plus/icons-vue';
 import FileExplorer from '@/components/FileExplorer.vue';
 import MonacoEditor from '@/components/MonacoEditor.vue';
-import type { FileBase, FileEntry, UploadStrategy } from '@/services/files';
-import * as filesService from '@/services/files';
+import { useFileBrowser } from '@/composables/useFileBrowser';
+import type { FileEntry, UploadStrategy } from '@/services/files';
+import type { FileBase } from '@/services/files';
+import type { RecentFileEntry } from '@/stores/fileBrowser';
 
-const currentBase = ref<FileBase>('apps');
-const currentPath = ref('.');
-const selectedPath = ref<string | null>(null);
-const viewMode = ref<'list' | 'tree'>('list');
-const files = ref<FileEntry[]>([]);
-const loading = ref(false);
-const openFile = ref<FileEntry | null>(null);
-const fileContent = ref('');
+const browser = useFileBrowser();
 
+const {
+  base,
+  path,
+  items,
+  loading,
+  viewMode,
+  searchQuery,
+  openFile,
+  selectedPath,
+  recentlyOpened,
+  allowRootBrowsing,
+  allowRootMutations,
+  hasUnsavedChanges,
+  initializeForApp,
+  changeBase,
+  changePath,
+  selectPath,
+  setViewMode,
+  setSearchQuery,
+  openEntry,
+  createFile,
+  createFolder,
+  renameEntry,
+  deleteEntry,
+  uploadFiles,
+  refresh,
+  updateOpenFileContent,
+  saveOpenFile,
+  openFileByPath
+} = browser;
+
+const isDragOver = ref(false);
 const uploadDialogVisible = ref(false);
-const uploadFiles = ref<File[]>([]);
+const uploadFilesBuffer = ref<File[]>([]);
 const uploadStrategy = ref<UploadStrategy>('replace');
 const uploading = ref(false);
-const isDragOver = ref(false);
+
+const editorContent = computed({
+  get: () => openFile.value?.content ?? '',
+  set: (value: string) => {
+    if (openFile.value) {
+      updateOpenFileContent(value);
+    }
+  }
+});
+
+const baseLabel = computed(() => (base.value === 'apps' ? 'Apps directory' : 'Project root'));
+const pathDisplay = computed(() => (path.value === '.' ? '.' : path.value));
+const canMutate = computed(() => (base.value === 'root' ? allowRootMutations.value : true));
+const recentItems = computed(() => recentlyOpened.value.slice(0, 8));
 
 const folderFromFile = computed(() => {
-  if (uploadFiles.value.length !== 1) return '';
-  const name = uploadFiles.value[0].name;
+  if (uploadFilesBuffer.value.length !== 1) return '';
+  const name = uploadFilesBuffer.value[0].name;
   return name.substring(0, name.lastIndexOf('.')) || name;
 });
 
-async function loadFiles() {
-  loading.value = true;
+onMounted(async () => {
   try {
-    const result = await filesService.listFiles(currentBase.value, currentPath.value);
-    files.value = result.items;
-  } catch (error: any) {
-    ElMessage.error(error?.response?.data?.error || 'Failed to load files');
-    files.value = [];
-  } finally {
-    loading.value = false;
+    await browser.ensurePermissionsLoaded();
+    await initializeForApp(null, { force: true });
+  } catch (error) {
+    console.warn('Failed to initialize file browser', error);
   }
+});
+
+async function handleBaseUpdate(nextBase: FileBase) {
+  await changeBase(nextBase, { resetPath: true });
 }
 
-function handleBaseUpdate(base: FileBase) {
-  if (currentBase.value === base) return;
-  currentBase.value = base;
-  openFile.value = null;
-  fileContent.value = '';
-  selectedPath.value = null;
+async function handlePathUpdate(nextPath: string) {
+  await changePath(nextPath, { force: false });
 }
 
-function handlePathUpdate(path: string) {
-  if (currentPath.value === path && !loading.value) {
-    loadFiles();
-    return;
-  }
-  currentPath.value = path;
-  selectedPath.value = null;
-  loadFiles();
-}
-
-function handleSelectionUpdate(path: string | null) {
-  selectedPath.value = path;
+function handleSelectionUpdate(value: string | null) {
+  selectPath(value);
 }
 
 function handleViewModeUpdate(mode: 'list' | 'tree') {
-  viewMode.value = mode;
+  setViewMode(mode);
 }
 
-function handleFileSelect(entry: FileEntry) {
-  if (entry.type === 'file') {
-    selectedPath.value = entry.path;
-  }
+function handleSearchUpdate(query: string) {
+  setSearchQuery(query);
 }
 
-async function handleFileOpen(entry: FileEntry) {
-  if (entry.type !== 'file') return;
-
-  try {
-    const content = await filesService.readFileContent(currentBase.value, entry.path);
-    openFile.value = entry;
-    fileContent.value = content;
-  } catch (error: any) {
-    ElMessage.error(error?.response?.data?.error || 'Failed to open file');
-  }
+function handleCreateFile(payload: { name: string; path: string }) {
+  if (!canMutate.value) return;
+  createFile(payload.name, payload.path);
 }
 
-async function handleFileSave(payload: { content: string; resolve: (success: boolean) => void }) {
-  if (!openFile.value) {
-    payload.resolve(false);
-    return;
-  }
-
-  try {
-    await filesService.writeFileContent(currentBase.value, openFile.value.path, payload.content);
-    payload.resolve(true);
-  } catch (error: any) {
-    ElMessage.error(error?.response?.data?.error || 'Failed to save file');
-    payload.resolve(false);
-  }
+function handleCreateFolder(payload: { name: string; path: string }) {
+  if (!canMutate.value) return;
+  createFolder(payload.name, payload.path);
 }
 
-async function handleCreateFile(payload: { name: string; path: string }) {
-  try {
-    await filesService.writeFileContent(currentBase.value, payload.path, '');
-    ElMessage.success('File created');
-    selectedPath.value = payload.path;
-    await loadFiles();
-  } catch (error: any) {
-    ElMessage.error(error?.response?.data?.error || 'Failed to create file');
-  }
+function handleRename(payload: { entry: FileEntry; newName: string; newPath: string }) {
+  if (!canMutate.value) return;
+  renameEntry(payload.entry, payload.newPath);
 }
 
-async function handleCreateFolder(payload: { name: string; path: string }) {
-  try {
-    await filesService.createDirectory(currentBase.value, payload.path);
-    ElMessage.success('Folder created');
-    selectedPath.value = payload.path;
-    await loadFiles();
-  } catch (error: any) {
-    ElMessage.error(error?.response?.data?.error || 'Failed to create folder');
-  }
+function handleDelete(entry: FileEntry) {
+  if (!canMutate.value) return;
+  deleteEntry(entry);
 }
 
-async function handleRename(payload: { entry: FileEntry; newName: string; newPath: string }) {
-  try {
-    await filesService.renamePath(currentBase.value, payload.entry.path, payload.newPath);
-    ElMessage.success('Renamed successfully');
-
-    if (openFile.value?.path === payload.entry.path) {
-      try {
-        const content = await filesService.readFileContent(currentBase.value, payload.newPath);
-        openFile.value = {
-          ...openFile.value,
-          name: payload.newName,
-          path: payload.newPath
-        };
-        fileContent.value = content;
-      } catch (error: any) {
-        ElMessage.error(error?.response?.data?.error || 'Failed to reload file after rename');
-        openFile.value = null;
-        fileContent.value = '';
-      }
-    }
-
-    selectedPath.value = payload.newPath;
-    await loadFiles();
-  } catch (error: any) {
-    ElMessage.error(error?.response?.data?.error || 'Failed to rename');
-  }
+function handleSelect(entry: FileEntry) {
+  selectPath(entry.path);
 }
 
-async function handleDelete(entry: FileEntry) {
-  try {
-    await filesService.removePath(currentBase.value, entry.path);
-    ElMessage.success('Deleted successfully');
-    if (openFile.value?.path === entry.path) {
-      openFile.value = null;
-      fileContent.value = '';
-    }
-    if (selectedPath.value === entry.path) {
-      selectedPath.value = null;
-    }
-    await loadFiles();
-  } catch (error: any) {
-    ElMessage.error(error?.response?.data?.error || 'Failed to delete');
-  }
+function handleOpenEntry(entry: FileEntry) {
+  openEntry(entry);
 }
 
 function handleUploadTrigger(payload: { files: File[] }) {
   if (!payload.files.length) return;
-  uploadFiles.value = payload.files;
+  uploadFilesBuffer.value = payload.files;
   uploadDialogVisible.value = true;
   isDragOver.value = false;
 }
 
+function closeUploadDialog() {
+  uploadDialogVisible.value = false;
+  uploadFilesBuffer.value = [];
+  uploadStrategy.value = 'replace';
+}
+
 async function submitUpload() {
-  if (uploadFiles.value.length === 0) return;
+  if (uploadFilesBuffer.value.length === 0) return;
 
   uploading.value = true;
-
   try {
-    await filesService.uploadFiles({
-      base: currentBase.value,
-      targetPath: currentPath.value,
-      strategy: uploadStrategy.value,
-      files: uploadFiles.value
-    });
-
-    ElMessage.success(`Uploaded ${uploadFiles.value.length} file(s)`);
+    await uploadFiles(uploadFilesBuffer.value, uploadStrategy.value);
     uploadDialogVisible.value = false;
-    uploadFiles.value = [];
-    await loadFiles();
-  } catch (error: any) {
-    ElMessage.error(error?.response?.data?.error || 'Upload failed');
+    uploadFilesBuffer.value = [];
+  } catch (error) {
+    console.warn('Upload failed', error);
   } finally {
     uploading.value = false;
   }
 }
 
-function formatSize(bytes: number): string {
-  if (!bytes) return '0 B';
-  const k = 1024;
-  const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
-  const i = Math.min(Math.floor(Math.log(bytes) / Math.log(k)), sizes.length - 1);
-  const val = bytes / Math.pow(k, i);
-  return `${val % 1 === 0 ? val : val.toFixed(1)} ${sizes[i]}`;
+function refreshCurrentDirectory() {
+  refresh();
 }
 
 function onDragOver(event: DragEvent) {
@@ -326,7 +314,23 @@ function onDrop(event: DragEvent) {
   }
 }
 
-loadFiles();
+function formatSize(bytes: number): string {
+  if (!bytes) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+  const i = Math.min(Math.floor(Math.log(bytes) / Math.log(k)), sizes.length - 1);
+  const val = bytes / Math.pow(k, i);
+  return `${val % 1 === 0 ? val : val.toFixed(1)} ${sizes[i]}`;
+}
+
+async function handleEditorSave(payload: { content: string; resolve: (success: boolean) => void }) {
+  const success = await saveOpenFile(payload.content);
+  payload.resolve(success);
+}
+
+async function openRecent(item: RecentFileEntry) {
+  await openFileByPath(item.path, item.base);
+}
 </script>
 
 <style scoped>
@@ -345,16 +349,46 @@ loadFiles();
 
 .files-layout {
   display: grid;
-  grid-template-columns: 350px 1fr;
+  grid-template-columns: 370px 1fr;
   gap: 1.5rem;
   height: 100%;
 }
 
-.explorer-panel,
+.explorer-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  min-height: 0;
+}
+
 .editor-panel {
   display: flex;
   flex-direction: column;
   min-height: 0;
+  gap: 1rem;
+}
+
+.editor-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: rgba(15, 23, 42, 0.7);
+  border-radius: 0.75rem;
+  border: 1px solid var(--border-subtle);
+  padding: 0.75rem 1rem;
+}
+
+.editor-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+.editor-path {
+  font-family: "JetBrains Mono", "Fira Code", monospace;
+  color: var(--text-emphasis);
 }
 
 .editor-placeholder {
@@ -367,49 +401,31 @@ loadFiles();
   border: 1px solid var(--border-subtle);
 }
 
-.upload-content {
-  display: flex;
-  flex-direction: column;
-  gap: 1.5rem;
-}
-
-.upload-list {
+.recent-section {
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid var(--border-subtle);
+  border-radius: 0.75rem;
+  padding: 0.75rem;
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
 }
 
-.upload-header {
-  font-weight: 500;
-  color: var(--text-emphasis);
-}
-
-.files-container {
-  max-height: 200px;
-  overflow-y: auto;
-  padding: 0.75rem;
-  background: var(--surface-subtle);
-  border-radius: 0.5rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-}
-
-.file-row {
-  font-size: 0.875rem;
-  color: var(--text-emphasis);
-}
-
-.file-size {
-  color: var(--text-muted);
+.recent-title {
   font-size: 0.8rem;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  letter-spacing: 0.08em;
 }
 
-@media (max-width: 960px) {
-  .files-layout {
-    grid-template-columns: 1fr;
-    grid-template-rows: 300px 1fr;
-  }
+.recent-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.recent-chip {
+  cursor: pointer;
 }
 
 .drop-overlay {
@@ -440,5 +456,50 @@ loadFiles();
 .drop-inner .el-icon {
   font-size: 3rem;
   color: var(--primary);
+}
+
+.upload-content {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.upload-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.upload-header {
+  font-weight: 500;
+  color: var(--text-emphasis);
+}
+
+.files-container {
+  max-height: 220px;
+  overflow-y: auto;
+  padding: 0.75rem;
+  background: var(--surface-subtle);
+  border-radius: 0.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.file-row {
+  font-size: 0.875rem;
+  color: var(--text-emphasis);
+}
+
+.file-size {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
+@media (max-width: 960px) {
+  .files-layout {
+    grid-template-columns: 1fr;
+    grid-template-rows: 320px 1fr;
+  }
 }
 </style>
