@@ -1,1 +1,45 @@
-[]
+[
+  {
+    "id": "EUm80r8VYr",
+    "name": "Test App",
+    "type": "cli",
+    "cwd": "/tmp",
+    "startCmd": "echo test",
+    "env": {},
+    "status": "stopped",
+    "pid": null,
+    "createdAt": 1762352003798,
+    "updatedAt": 1762352126214,
+    "metricsSnapshot": null,
+    "startTime": 1762352106464,
+    "stopTime": 1762352126214,
+    "exitCode": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "id": "vgFcobR3NX",
+    "name": "Sleep App",
+    "type": "cli",
+    "cwd": "/tmp",
+    "startCmd": "sleep 100",
+    "env": {},
+    "status": "stopped",
+    "pid": null,
+    "createdAt": 1762352140154,
+    "updatedAt": 1762352166272,
+    "metricsSnapshot": {
+      "appId": "vgFcobR3NX",
+      "pid": 8053,
+      "cpu": 0,
+      "memory": 1093632,
+      "uptime": 19020,
+      "timestamp": 1762352165450
+    },
+    "startTime": 1762352146430,
+    "stopTime": 1762352166272,
+    "exitCode": null,
+    "signal": "SIGTERM",
+    "error": null
+  }
+]

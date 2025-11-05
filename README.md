@@ -111,3 +111,172 @@ Two JSON files are included for initial configuration:
 ## Frontend deployment
 
 Running `npm run build` inside `frontend/` outputs production files directly to `../html`. The backend can then serve the compiled UI via `/`.
+
+## Console Feature
+
+The backend provides interactive console sessions for apps using node-pty with WebSocket streaming.
+
+### REST API
+
+#### Create Console Session
+```http
+POST /api/apps/:id/console
+Content-Type: application/json
+
+{
+  "shell": "/bin/bash",     // Optional: shell to spawn (defaults to system shell)
+  "env": {                  // Optional: environment variables
+    "cwd": "/path/to/dir"   // Optional: working directory (defaults to app.cwd)
+  },
+  "cols": 80,               // Optional: terminal columns (default: 80)
+  "rows": 24,               // Optional: terminal rows (default: 24)
+  "token": "auth-token"     // Optional: authentication token placeholder
+}
+```
+
+**Response (201)**:
+```json
+{
+  "sessionId": "abc123",
+  "shell": "/bin/bash",
+  "cols": 80,
+  "rows": 24,
+  "created": 1234567890
+}
+```
+
+#### Get Console Session Info
+```http
+GET /api/console/:sessionId
+```
+
+#### Close Console Session
+```http
+DELETE /api/console/:sessionId
+```
+
+#### List App Consoles
+```http
+GET /api/apps/:id/consoles
+```
+
+#### List All Consoles
+```http
+GET /api/console
+```
+
+### WebSocket Protocol
+
+Connect to `/ws` and subscribe to console output:
+
+```json
+{
+  "type": "subscribe",
+  "channel": "console:SESSION_ID"
+}
+```
+
+#### Client → Server Messages
+
+**Write Input to Console**:
+```json
+{
+  "type": "console:input",
+  "sessionId": "abc123",
+  "data": "ls -la\n"
+}
+```
+
+**Resize Console**:
+```json
+{
+  "type": "console:resize",
+  "sessionId": "abc123",
+  "cols": 100,
+  "rows": 30
+}
+```
+
+#### Server → Client Messages
+
+**Console Output**:
+```json
+{
+  "type": "console:data",
+  "sessionId": "abc123",
+  "appId": "app-id",
+  "data": "terminal output...",
+  "timestamp": 1234567890
+}
+```
+
+**Console Terminated**:
+```json
+{
+  "type": "console:terminated",
+  "sessionId": "abc123",
+  "appId": "app-id",
+  "reason": "app-stopped|process-exit|manual|inactivity-timeout",
+  "exitCode": 0,
+  "signal": null,
+  "timestamp": 1234567890
+}
+```
+
+**Console Created**:
+```json
+{
+  "type": "console:created",
+  "sessionId": "abc123",
+  "appId": "app-id",
+  "shell": "/bin/bash",
+  "cols": 80,
+  "rows": 24,
+  "created": 1234567890,
+  "timestamp": 1234567890
+}
+```
+
+**Console Resized**:
+```json
+{
+  "type": "console:resized",
+  "sessionId": "abc123",
+  "appId": "app-id",
+  "cols": 100,
+  "rows": 30,
+  "timestamp": 1234567890
+}
+```
+
+### Features
+
+- **Multiple concurrent consoles**: Up to 3 sessions per app
+- **Automatic cleanup**: Consoles are destroyed when the associated app stops
+- **Inactivity timeout**: Sessions automatically close after 30 minutes of inactivity
+- **Real-time streaming**: PTY output is streamed via WebSocket within 1 second
+- **Terminal operations**: Full support for input, output, and resize operations
+
+### Platform Requirements
+
+The `node-pty` dependency requires native compilation:
+
+**Linux/macOS**:
+- Python 3.x
+- `make`
+- C/C++ compiler (gcc/clang)
+
+**Windows**:
+- Windows Build Tools or Visual Studio with C++ tools
+- Python 3.x
+
+**Install**:
+```bash
+npm install
+```
+
+If `node-pty` compilation fails, ensure build tools are installed:
+
+- **Ubuntu/Debian**: `sudo apt-get install build-essential python3`
+- **macOS**: `xcode-select --install`
+- **Windows**: `npm install --global windows-build-tools`
