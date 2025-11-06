@@ -105,8 +105,6 @@ export function useWebSocketStatus() {
 
   // Monitor connection status changes
   onMounted(() => {
-    const unwatch = computed(() => connectionStatus.value);
-    
     // Add connection status change handling
     const checkConnection = () => {
       const currentStatus = connectionStatus.value;
@@ -132,7 +130,6 @@ export function useWebSocketStatus() {
       if (reconnectTimeout) {
         clearTimeout(reconnectTimeout);
       }
-      unwatch();
     });
   });
 

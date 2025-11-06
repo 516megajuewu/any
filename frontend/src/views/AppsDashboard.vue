@@ -400,6 +400,8 @@ onBeforeUnmount(() => {
 
 .dashboard-alert {
   border-radius: 1rem;
+  backdrop-filter: blur(10px);
+  box-shadow: var(--shadow-md);
 }
 
 .state-card {
@@ -408,9 +410,16 @@ onBeforeUnmount(() => {
   justify-content: center;
   min-height: 320px;
   border-radius: 1.5rem;
-  background: rgba(15, 23, 42, 0.72);
-  border: 1px solid rgba(148, 163, 184, 0.12);
-  backdrop-filter: blur(18px);
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  backdrop-filter: blur(20px);
+  box-shadow: var(--shadow-lg);
+  transition: all var(--transition-base);
+}
+
+.state-card:hover {
+  box-shadow: var(--shadow-xl);
+  border-color: var(--border-default);
 }
 
 .state-card--empty {

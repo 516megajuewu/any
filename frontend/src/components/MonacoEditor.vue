@@ -26,7 +26,7 @@
 import { ref, onMounted, onBeforeUnmount, watch, shallowRef, markRaw } from 'vue';
 import { ElMessage } from 'element-plus';
 import type * as MonacoType from 'monaco-editor';
-import { Save as SaveIcon } from '@element-plus/icons-vue';
+import { Select as SaveIcon } from '@element-plus/icons-vue';
 
 interface Props {
   modelValue: string;

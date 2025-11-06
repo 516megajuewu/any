@@ -46,13 +46,11 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { useAppStore } from '@/stores/app';
 import { useHotReload } from '@/composables/useHotReload';
 import { useWebSocketStatus } from '@/composables/useWebSocketStatus';
 
 const router = useRouter();
 const route = useRoute();
-const appStore = useAppStore();
 
 useHotReload();
 const { 
@@ -99,14 +97,30 @@ const statusIndicatorClass = computed(() => ({
 .app-layout {
   min-height: 100vh;
   background: var(--bg-primary);
+  position: relative;
+}
+
+.app-layout::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 400px;
+  background: radial-gradient(ellipse at top, rgba(59, 130, 246, 0.15) 0%, transparent 70%);
+  pointer-events: none;
+  z-index: 0;
 }
 
 .app-aside {
-  background: var(--bg-secondary);
+  background: var(--glass-bg);
+  backdrop-filter: blur(20px);
   border-right: 1px solid var(--border-default);
   display: flex;
   flex-direction: column;
   padding: 1.5rem 1rem;
+  position: relative;
+  z-index: 1;
 }
 
 .app-logo {
@@ -124,8 +138,20 @@ const statusIndicatorClass = computed(() => ({
   width: 10px;
   height: 10px;
   border-radius: 50%;
-  background: linear-gradient(135deg, var(--primary), var(--primary-accent));
-  box-shadow: 0 0 12px rgba(59, 130, 246, 0.6);
+  background: var(--gradient-primary);
+  box-shadow: 0 0 16px rgba(59, 130, 246, 0.8), 0 0 4px rgba(59, 130, 246, 0.5);
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+@keyframes pulse-glow {
+  0%, 100% { 
+    opacity: 1;
+    box-shadow: 0 0 16px rgba(59, 130, 246, 0.8), 0 0 4px rgba(59, 130, 246, 0.5);
+  }
+  50% { 
+    opacity: 0.8;
+    box-shadow: 0 0 24px rgba(59, 130, 246, 1), 0 0 8px rgba(59, 130, 246, 0.7);
+  }
 }
 
 .app-logo__title {
@@ -143,21 +169,43 @@ const statusIndicatorClass = computed(() => ({
   margin-bottom: 0.5rem;
   color: var(--text-muted);
   font-weight: 500;
-  transition: all 0.2s ease;
+  transition: all var(--transition-base);
+  position: relative;
+  overflow: hidden;
+}
+
+.app-menu :deep(.el-menu-item::before) {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 0;
+  background: var(--gradient-primary);
+  transition: height var(--transition-base);
+  border-radius: 0 2px 2px 0;
 }
 
 .app-menu :deep(.el-menu-item:hover) {
   background: var(--bg-hover);
   color: var(--text-secondary);
+  transform: translateX(2px);
 }
 
 .app-menu :deep(.el-menu-item.is-active) {
   color: var(--text-emphasis);
-  background: var(--accent-primary);
+  background: var(--accent-light);
+  font-weight: 600;
+}
+
+.app-menu :deep(.el-menu-item.is-active::before) {
+  height: 60%;
 }
 
 .app-menu :deep(.el-menu-item.is-active:hover) {
-  background: var(--accent-hover);
+  background: var(--accent-light);
+  opacity: 0.9;
 }
 
 .app-header {
@@ -165,8 +213,12 @@ const statusIndicatorClass = computed(() => ({
   align-items: center;
   justify-content: space-between;
   padding: 1.25rem 2rem;
-  background: var(--bg-secondary); 
+  background: var(--glass-bg);
+  backdrop-filter: blur(20px);
   border-bottom: 1px solid var(--border-default);
+  position: relative;
+  z-index: 1;
+  box-shadow: var(--shadow-sm);
 }
 
 .header-title {
@@ -179,31 +231,36 @@ const statusIndicatorClass = computed(() => ({
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
-  padding: 0.4rem 0.85rem;
+  padding: 0.5rem 1rem;
   border-radius: 999px;
   background: var(--bg-tertiary);
   color: var(--text-muted);
   font-size: 0.85rem;
-  border: 1px solid var(--border-subtle);
-  transition: all 0.2s ease;
+  border: 1px solid var(--border-default);
+  transition: all var(--transition-base);
+  box-shadow: var(--shadow-sm);
+  font-weight: 500;
 }
 
 .header-status.is-online {
-  color: var(--success);
+  color: var(--success-strong);
   border-color: var(--success);
   background: var(--success-light);
+  box-shadow: 0 0 20px rgba(16, 185, 129, 0.2);
 }
 
 .header-status.is-offline {
-  color: var(--danger);
+  color: var(--danger-strong);
   border-color: var(--danger);
   background: var(--danger-light);
+  box-shadow: 0 0 20px rgba(239, 68, 68, 0.2);
 }
 
 .header-status.is-degraded {
-  color: var(--warning);
+  color: var(--warning-strong);
   border-color: var(--warning);
   background: var(--warning-light);
+  box-shadow: 0 0 20px rgba(245, 158, 11, 0.2);
 }
 
 .status-indicator {
@@ -248,8 +305,10 @@ const statusIndicatorClass = computed(() => ({
 
 .app-main {
   padding: 2rem;
-  background: var(--bg-primary);
+  background: transparent;
   min-height: calc(100vh - 80px);
+  position: relative;
+  z-index: 1;
 }
 
 .reconnect-btn {

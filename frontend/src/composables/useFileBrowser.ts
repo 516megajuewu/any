@@ -188,7 +188,7 @@ export function useFileBrowser() {
 
     if (useCache) {
       const cached = fileStore.getCachedDirectory(baseToUse, normalizedPath) as DirectoryCacheEntry | null;
-      if (shouldUseDirectoryCache(cached, options.force)) {
+      if (cached && shouldUseDirectoryCache(cached, options.force)) {
         fileStore.setBase(baseToUse);
         fileStore.setPath(normalizedPath);
         fileStore.setItems(cached.items);
@@ -272,7 +272,7 @@ export function useFileBrowser() {
     }
 
     const cached = fileStore.getCachedFileContent(fileStore.base, entry.path) as ContentCacheEntry | null;
-    if (shouldUseContentCache(cached, options.force ?? false)) {
+    if (cached && shouldUseContentCache(cached, options.force ?? false)) {
       fileStore.setOpenFile({
         base: fileStore.base,
         path: entry.path,
@@ -497,7 +497,7 @@ export function useFileBrowser() {
       });
 
       const uploadedCount = responses.filter((response) => response.success).length;
-      const skippedCount = responses.filter((response) => response.skipped).length;
+      const skippedCount = responses.filter((response) => response.skipped || false).length;
 
       if (uploadedCount > 0) {
         ElMessage.success(`Uploaded ${uploadedCount} file${uploadedCount === 1 ? '' : 's'}.`);

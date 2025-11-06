@@ -2,6 +2,7 @@ const { spawn } = require('child_process');
 const { EventEmitter } = require('events');
 const treeKill = require('tree-kill');
 const logBus = require('./logBus');
+const { PROCESS } = require('./constants');
 
 const isWindows = process.platform === 'win32';
 const processes = new Map();
@@ -146,7 +147,7 @@ function startApp({ id, cwd, cmd, env }) {
   };
 }
 
-function stopApp(id, signal = 'SIGTERM') {
+function stopApp(id, signal = PROCESS.STOP_SIGNAL) {
   const record = ensureRecord(id);
 
   if (record.status !== 'running' || !record.process || !record.pid) {
@@ -186,7 +187,7 @@ async function restartApp(id) {
 
   record.restarts += 1;
   await stopApp(id);
-  await new Promise((resolve) => setTimeout(resolve, 250));
+  await new Promise((resolve) => setTimeout(resolve, PROCESS.RESTART_DELAY));
   return startApp({ id, cwd: record.cwd, cmd: record.cmd, env: record.env });
 }
 
@@ -215,14 +216,17 @@ function listApps() {
 
 async function stopAll() {
   const running = Array.from(processes.values()).filter((app) => app.status === 'running');
-  await Promise.all(
-    running.map((app) =>
-      stopApp(app.id).catch((error) => {
-        // eslint-disable-next-line no-console
-        console.error(`Failed to stop ${app.id}:`, error);
-      })
-    )
+  const results = await Promise.allSettled(
+    running.map((app) => stopApp(app.id))
   );
+  
+  results.forEach((result, index) => {
+    if (result.status === 'rejected') {
+      const app = running[index];
+      logBus.append(app.id, 'stderr', `Failed to stop: ${result.reason?.message || 'Unknown error'}`);
+      events.emit('error', { id: app.id, error: result.reason });
+    }
+  });
 }
 
 module.exports = {
