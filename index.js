@@ -13,6 +13,8 @@ const fileService = require('./core/fileService');
 const packageManager = require('./core/packageManager');
 const consoleManager = require('./core/consoleManager');
 const { serializeApps } = require('./core/appSerializer');
+const { SERVER, MIME_TYPES } = require('./core/constants');
+const { loadSettings, saveSettings } = require('./core/utils');
 
 const appsRoutes = require('./core/routes/apps');
 const logsRoutes = require('./core/routes/logs');
@@ -23,29 +25,14 @@ const consoleRoutes = require('./core/routes/console');
 const isDevMode = process.argv.includes('--dev') || process.env.NODE_ENV === 'development';
 process.env.NODE_ENV = isDevMode ? 'development' : process.env.NODE_ENV || 'production';
 
-const PORT = Number(process.env.PORT) || 3000;
-const HOST = process.env.HOST || '0.0.0.0';
+const PORT = Number(process.env.PORT) || SERVER.DEFAULT_PORT;
+const HOST = process.env.HOST || SERVER.DEFAULT_HOST;
 const HTML_DIRECTORY = path.join(__dirname, 'html');
 const DATA_DIRECTORY = path.join(__dirname, 'data');
 
-const MIME_TYPES = {
-  '.html': 'text/html; charset=utf-8',
-  '.js': 'application/javascript; charset=utf-8',
-  '.mjs': 'application/javascript; charset=utf-8',
-  '.css': 'text/css; charset=utf-8',
-  '.json': 'application/json; charset=utf-8',
-  '.png': 'image/png',
-  '.jpg': 'image/jpeg',
-  '.jpeg': 'image/jpeg',
-  '.svg': 'image/svg+xml',
-  '.ico': 'image/x-icon',
-  '.txt': 'text/plain; charset=utf-8',
-  '.map': 'application/json; charset=utf-8'
-};
-
 const fastify = Fastify({
   logger: {
-    level: process.env.LOG_LEVEL || (isDevMode ? 'debug' : 'info')
+    level: process.env.LOG_LEVEL || (isDevMode ? SERVER.LOG_LEVEL_DEV : SERVER.LOG_LEVEL_PROD)
   }
 });
 
@@ -73,16 +60,9 @@ fastify.addHook('onRequest', (request, reply, done) => {
 });
 
 async function readJsonFile(fileName, fallback) {
+  const { readJsonFile: utilReadJson } = require('./core/utils');
   const target = path.join(DATA_DIRECTORY, fileName);
-  try {
-    const raw = await fs.promises.readFile(target, 'utf8');
-    return JSON.parse(raw || 'null');
-  } catch (error) {
-    if (error.code === 'ENOENT' && fallback !== undefined) {
-      return fallback;
-    }
-    throw error;
-  }
+  return utilReadJson(target, fallback);
 }
 
 async function sendStaticFile(request, reply, relativePath, { fallbackToIndex } = { fallbackToIndex: true }) {
@@ -146,30 +126,16 @@ fastify.get('/health', async () => ({
   timestamp: Date.now()
 }));
 
-fastify.get('/api/settings', async () => readJsonFile('settings.json', {
-  ui: {},
-  pkgManagers: { node: 'npm', python: 'pip' },
-  pipIndex: null,
-  allowRootBrowse: false,
-  authToken: null
-}));
+fastify.get('/api/settings', async () => loadSettings(DATA_DIRECTORY));
 
 fastify.put('/api/settings', async (request, reply) => {
-  const settingsPath = path.join(DATA_DIRECTORY, 'settings.json');
-  const currentSettings = await readJsonFile('settings.json', {
-    ui: {},
-    pkgManagers: { node: 'npm', python: 'pip' },
-    pipIndex: null,
-    allowRootBrowse: false,
-    authToken: null
-  });
-
-  const newSettings = { ...currentSettings, ...request.body };
-
   try {
-    await fs.promises.writeFile(settingsPath, JSON.stringify(newSettings, null, 2), 'utf8');
-    return newSettings;
+    const currentSettings = await loadSettings(DATA_DIRECTORY);
+    const newSettings = { ...currentSettings, ...request.body };
+    const saved = await saveSettings(DATA_DIRECTORY, newSettings);
+    return saved;
   } catch (error) {
+    fastify.log.error({ err: error }, 'Failed to save settings');
     reply.code(500);
     return { error: error.message };
   }

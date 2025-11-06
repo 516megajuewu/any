@@ -34,6 +34,7 @@ export interface UploadResponse {
   targetPath: string;
   strategy: UploadStrategy;
   items: UploadSummaryItem[];
+  skipped?: boolean;
 }
 
 export type UploadStrategy = 'replace' | 'skip' | 'rename';
@@ -104,11 +105,11 @@ export async function uploadFile(
 
 export async function uploadFiles(options: UploadOptions): Promise<UploadResponse[]> {
   const { base, targetPath, strategy, files } = options;
-  const createFolder = files.length === 1 && !files[0].name.toLowerCase().endsWith('.zip');
+  const createFolder = !!(files && files.length === 1 && files[0] && !files[0].name.toLowerCase().endsWith('.zip'));
   const results: UploadResponse[] = [];
 
   for (const file of files) {
-    const result = await uploadFile(base, targetPath, file, strategy, createFolder);
+    const result = await uploadFile(base, targetPath, file, strategy || 'overwrite', createFolder);
     results.push(result);
   }
 

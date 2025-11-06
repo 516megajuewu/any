@@ -1,27 +1,16 @@
+const path = require('path');
 const registry = require('../registry');
 const processManager = require('../processManager');
 const metrics = require('../metrics');
 const packageManager = require('../packageManager');
 const wsHub = require('../wsHub');
 const { serializeApp, serializeApps } = require('../appSerializer');
+const { loadSettings } = require('../utils');
+const { APP_TYPES } = require('../constants');
 
 async function readSettings() {
-  const fs = require('fs');
-  const path = require('path');
   const dataPath = path.join(process.cwd(), 'data');
-  
-  try {
-    const raw = await fs.promises.readFile(path.join(dataPath, 'settings.json'), 'utf8');
-    return JSON.parse(raw || 'null');
-  } catch (error) {
-    return {
-      ui: {},
-      pkgManagers: { node: 'npm', python: 'pip' },
-      pipIndex: null,
-      allowRootBrowse: false,
-      authToken: null
-    };
-  }
+  return loadSettings(dataPath);
 }
 
 async function appsRoutes(fastify) {
@@ -86,9 +75,9 @@ async function appsRoutes(fastify) {
     }
 
     if (payload.type !== undefined) {
-      if (!['node', 'python', 'cli'].includes(payload.type)) {
+      if (!APP_TYPES.includes(payload.type)) {
         reply.code(400);
-        return { error: 'Invalid app type' };
+        return { error: `Invalid app type. Must be one of: ${APP_TYPES.join(', ')}` };
       }
       updates.type = payload.type;
     }

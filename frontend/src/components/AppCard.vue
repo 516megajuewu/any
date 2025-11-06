@@ -391,24 +391,35 @@ const handleCommand = (command: string) => {
   width: 12px;
   height: 12px;
   border-radius: 50%;
-  background: var(--border-subtle);
+  background: var(--text-muted);
   box-shadow: 0 0 8px rgba(148, 163, 184, 0.3);
-  transition: all 0.3s ease;
+  transition: all var(--transition-base);
 }
 
 .dot.running {
   background: var(--success);
-  box-shadow: 0 0 12px rgba(34, 197, 94, 0.7);
+  box-shadow: 0 0 12px var(--success), 0 0 4px var(--success);
+  animation: pulse-dot 2s ease-in-out infinite;
 }
 
 .dot.error {
   background: var(--danger);
-  box-shadow: 0 0 12px rgba(248, 113, 113, 0.65);
+  box-shadow: 0 0 12px var(--danger), 0 0 4px var(--danger);
 }
 
 .dot.starting {
   background: var(--warning);
-  box-shadow: 0 0 12px rgba(250, 204, 21, 0.6);
+  box-shadow: 0 0 12px var(--warning), 0 0 4px var(--warning);
+  animation: pulse-dot 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse-dot {
+  0%, 100% { 
+    opacity: 1;
+  }
+  50% { 
+    opacity: 0.6;
+  }
 }
 
 .titles {
@@ -506,19 +517,28 @@ const handleCommand = (command: string) => {
 }
 
 .metric {
-  background: rgba(30, 41, 59, 0.65);
+  background: var(--bg-tertiary);
   padding: 0.85rem;
   border-radius: 0.9rem;
   display: flex;
   flex-direction: column;
   gap: 0.3rem;
+  border: 1px solid var(--border-subtle);
+  transition: all var(--transition-fast);
+}
+
+.metric:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-default);
+  transform: translateY(-2px);
 }
 
 .metric .label {
   font-size: 0.75rem;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: rgba(148, 163, 184, 0.7);
+  color: var(--text-muted);
+  font-weight: 600;
 }
 
 .metric .value {
@@ -549,17 +569,18 @@ const handleCommand = (command: string) => {
 .event-row {
   padding: 0.85rem;
   border-radius: 0.9rem;
-  background: rgba(59, 130, 246, 0.08);
-  border: 1px solid rgba(59, 130, 246, 0.15);
-  color: rgba(191, 219, 254, 0.9);
+  background: var(--info-light);
+  border: 1px solid var(--info);
+  color: var(--info-strong);
   font-size: 0.9rem;
   line-height: 1.4;
+  transition: all var(--transition-fast);
 }
 
 .event-row--error {
-  background: rgba(248, 113, 113, 0.08);
-  border-color: rgba(248, 113, 113, 0.25);
-  color: rgba(254, 202, 202, 0.95);
+  background: var(--danger-light);
+  border-color: var(--danger);
+  color: var(--danger-strong);
 }
 
 .event-text {
